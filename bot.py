@@ -1,13 +1,12 @@
 from collections import defaultdict
 from os import getenv
+from random import randint
 
 from discord import Activity, ActivityType, Intents, Message, Client, DMChannel, User
 from discord.ext import tasks
 from dotenv import load_dotenv
-from langdetect import detect
 from speech_recognition import Recognizer, AudioData
 from speech_recognition.recognizers.whisper_local import faster_whisper
-from sympy.core.random import randint
 
 from model import get_response
 
@@ -81,9 +80,9 @@ async def on_message(message: Message):
         return
     if not isinstance(message.channel, DMChannel):
         return
-    if not detect(message.content) == "en":
-        await message.channel.send("Someone tell XiaoYuan151 that there is a problem with my AI.")
-        return
+    # if not detect(message.content)["lang"] == "en":
+    # await message.channel.send("Someone tell XiaoYuan151 that there is a problem with my AI.")
+    # return
     text = f"{message.author}: {message.content}"
     print(text)
     response = get_response(text)

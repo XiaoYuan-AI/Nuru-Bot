@@ -32,4 +32,5 @@ def result_filter(input: str) -> int:
     selected_logits = logits[0, -1, [vocab['Yes'], vocab['No']]]
     probabilities = softmax(selected_logits, dim=0)
     score = probabilities[0].item()
+    print(score)
     return score
