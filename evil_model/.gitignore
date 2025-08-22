@@ -1,0 +1,6 @@
+# Model files.
+
+*
+!finals/
+!logs/
+!.gitignore

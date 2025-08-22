@@ -1,18 +1,21 @@
 from collections import defaultdict
 from os import getenv
-from random import randint
 
-from discord import Activity, ActivityType, Intents, Message, Client, DMChannel, User
+from discord import Activity, ActivityType, Intents, Message, Client, DMChannel, User, Reaction
 from discord.ext import tasks
+from discord.ext.voice_recv import VoiceRecvClient
+from discord.ext.voice_recv.extras.speechrecognition import SpeechRecognitionSink
 from dotenv import load_dotenv
 from speech_recognition import Recognizer, AudioData
 from speech_recognition.recognizers.whisper_local import faster_whisper
+from websockets import connect
 
 from model import get_response
 
 load_dotenv()
 TOKEN = getenv("TOKEN")
 client = Client(intents=Intents.all(), proxy="http://127.0.0.1:10808")
+voice_channel = None
 voice_client = None
 prompts = {}
 
@@ -49,7 +52,7 @@ def got_text(user: User, text: str):
             prompts[user.display_name] = ""
 
 
-@tasks.loop(seconds=randint(60, 180))
+@tasks.loop(seconds=32)  # randint(32, 64)
 async def auto_prompt():
     response = get_response(auto=True)
     # tts = get_tts(response, True)
@@ -65,24 +68,30 @@ async def before_auto_prompt():
 
 @client.event
 async def on_ready():
+    global voice_channel
     global voice_client
-    activity = Activity(name="WIP", type=ActivityType.playing)
+    activity = Activity(name="Still WIP", type=ActivityType.playing)
     await client.change_presence(activity=activity)
-    voice_channel = client.get_channel(1398314576059043994)
-    # voice_client = await voice_channel.connect(cls=voice_recv.VoiceRecvClient)
-    # speech_sink = SpeechRecognitionSink(process_cb=process_audio, text_cb=got_text, default_recognizer="whisper")
-    # voice_client.listen(speech_sink)
+    # auto_prompt.start()
+    voice_channel = client.get_channel(1407667060527599736)
+    invite = await voice_channel.create_invite(max_age=300, max_uses=1)
+    user = await client.fetch_user(997401702321881088)
+    await user.send(invite.url)
+    voice_client = await voice_channel.connect(cls=VoiceRecvClient)
+    speech_sink = SpeechRecognitionSink(process_cb=process_audio, text_cb=got_text, default_recognizer="whisper")
+    voice_client.listen(speech_sink)
 
 
 @client.event
 async def on_message(message: Message):
+    global voice_channel
+    global voice_client
     if message.author == client.user:
         return
     if not isinstance(message.channel, DMChannel):
         return
-    # if not detect(message.content)["lang"] == "en":
-    # await message.channel.send("Someone tell XiaoYuan151 that there is a problem with my AI.")
-    # return
+    if not message.content:
+        return
     text = f"{message.author}: {message.content}"
     print(text)
     response = get_response(text)
@@ -91,4 +100,27 @@ async def on_message(message: Message):
     await message.channel.send(response)
 
 
-client.run(TOKEN)
+@client.event
+async def on_reaction_add(reaction: Reaction, user: User):
+    if user == client.user:
+        return
+    if not isinstance(reaction.message.channel, DMChannel):
+        return
+    if not reaction.emoji:
+        return
+    text = f"{user.name}'s reaction is: {reaction.emoji}"
+    response = ""
+    print(text)
+    async with connect("ws://127.0.0.1:8000/generate") as websocket:
+        await websocket.send("11.4 and 11.35, which is bigger?")
+        async for message in websocket:
+            print(message, end="", flush=True)
+            response += message
+    # response = get_response(text)
+    # response = get_response_evil(text)
+    print(response)
+    await reaction.message.channel.send(response)
+
+
+if __name__ == "__main__":
+    client.run(TOKEN)
