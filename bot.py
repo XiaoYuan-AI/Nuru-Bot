@@ -6,11 +6,9 @@ from discord.ext import tasks
 from discord.ext.voice_recv import VoiceRecvClient
 from discord.ext.voice_recv.extras.speechrecognition import SpeechRecognitionSink
 from dotenv import load_dotenv
+from requests import get
 from speech_recognition import Recognizer, AudioData
 from speech_recognition.recognizers.whisper_local import faster_whisper
-from websockets import connect
-
-from model import get_response
 
 load_dotenv()
 TOKEN = getenv("TOKEN")
@@ -40,7 +38,9 @@ def got_text(user: User, text: str):
                 for username, content in prompts.items():
                     prompt = f"{username}: {content}"
                     print(prompt)
-                    response = get_response(prompt)
+                    data = get(f"http://127.0.0.1:8000/get?input={prompt}")
+                    json = data.json()
+                    response = json["result"]
                     print(response)
                     client.loop.create_task(user.send(response))
                 prompts = {}
@@ -54,7 +54,9 @@ def got_text(user: User, text: str):
 
 @tasks.loop(seconds=32)  # randint(32, 64)
 async def auto_prompt():
-    response = get_response(auto=True)
+    data = get("http://127.0.0.1:8000/get?input=auto")
+    json = data.json()
+    response = json["result"]
     # tts = get_tts(response, True)
     # audio = FFmpegPCMAudio(tts)
     # voice_client.play(audio)
@@ -94,7 +96,16 @@ async def on_message(message: Message):
         return
     text = f"{message.author}: {message.content}"
     print(text)
-    response = get_response(text)
+    # response = ""
+    data = get(f"http://127.0.0.1:8000/get?input={text}")
+    json = data.json()
+    response = json["result"]
+    # async with connect("ws://127.0.0.1:8000/generate") as websocket:
+    # await websocket.send(text)
+    # async for message in websocket:
+    # print(message, end="", flush=True)
+    # response += message
+    # response = get_response(text)
     # response = get_response_evil(text)
     print(response)
     await message.channel.send(response)
@@ -109,13 +120,16 @@ async def on_reaction_add(reaction: Reaction, user: User):
     if not reaction.emoji:
         return
     text = f"{user.name}'s reaction is: {reaction.emoji}"
-    response = ""
     print(text)
-    async with connect("ws://127.0.0.1:8000/generate") as websocket:
-        await websocket.send("11.4 and 11.35, which is bigger?")
-        async for message in websocket:
-            print(message, end="", flush=True)
-            response += message
+    # response = ""
+    data = get(f"http://127.0.0.1:8000/get?input={text}")
+    json = data.json()
+    response = json["result"]
+    # async with connect("ws://127.0.0.1:8000/generate") as websocket:
+    # await websocket.send(text)
+    # async for message in websocket:
+    # print(message, end="", flush=True)
+    # response += message
     # response = get_response(text)
     # response = get_response_evil(text)
     print(response)

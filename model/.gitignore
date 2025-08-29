@@ -1,7 +1,0 @@
-# Model files.
-
-*
-!checkpoints/
-!finals/
-!logs/
-!.gitignore
