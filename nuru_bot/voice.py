@@ -164,18 +164,7 @@ class VoiceRuntime:
             self.start_recording(voice_client)
 
     async def speak(self, voice_client: VoiceClient, text: str) -> None:
-        if not text.strip():
-            return
-
-        chunks = self.api.stream_tts(text, voice=self.config.tts_voice)
-        source = FFmpegPCMAudio(
-            IteratorAudioStream(chunks),
-            pipe=True,
-            executable=self.config.ffmpeg_executable,
-        )
-        if voice_client.is_playing():
-            voice_client.stop()
-        voice_client.play(source)
+        await play_tts_stream(voice_client, self.api, self.config, text)
 
     def start_idle_commentary_loop(self, client: Client) -> None:
         if self._idle_task is not None and not self._idle_task.done():
@@ -245,6 +234,26 @@ async def connect_voice_channel(
     voice_client = await channel.connect()
     LOGGER.info("Connected to voice channel %s", config.voice_channel_id)
     return voice_client
+
+
+async def play_tts_stream(
+    voice_client: VoiceClient,
+    api: NuruApi,
+    config: BotConfig,
+    text: str,
+) -> None:
+    if not text.strip():
+        return
+
+    chunks = api.stream_tts(text, voice=config.tts_voice)
+    source = FFmpegPCMAudio(
+        IteratorAudioStream(chunks),
+        pipe=True,
+        executable=config.ffmpeg_executable,
+    )
+    if voice_client.is_playing():
+        voice_client.stop()
+    voice_client.play(source)
 
 
 def extract_audio_bytes(audio: object) -> bytes:

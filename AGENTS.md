@@ -2,9 +2,8 @@
 
 ## Project Structure & Module Organization
 
-This repository contains a Python Discord bot packaged under `nuru_bot/`.
-Root files `bot.py` and `main.py` are compatibility launchers; keep runtime logic
-inside the package modules.
+This Python Discord bot is packaged under `nuru_bot/`. Root files `bot.py` and
+`main.py` are compatibility launchers; keep runtime logic inside package modules.
 
 - `nuru_bot/bot.py`: Discord client factory and application entry point.
 - `nuru_bot/config.py`: environment parsing and default settings.
@@ -15,8 +14,7 @@ inside the package modules.
 - `nuru_bot/voice.py`: voice-channel connection and recording hooks.
 - `.env.example`: documented local configuration template.
 
-Tests live under `tests/` and focus on mock-friendly business logic rather than
-live Discord connections.
+Tests live under `tests/` and avoid live Discord connections.
 
 ## Build, Test, and Development Commands
 
@@ -28,27 +26,27 @@ uv run python -m nuru_bot
 uv run python bot.py
 uv run nuru-bot-doctor
 uv run nuru-bot-doctor --voice-sample .\samples\hey-nuru.wav
+uv run nuru-bot-doctor --discord-live
 uv run pytest
 uv run python -m compileall bot.py main.py nuru_bot
 uv lock --check
 ```
 
-`uv sync` installs locked dependencies. `python -m nuru_bot` runs the package
-entry point. `nuru-bot-doctor` checks runtime configuration, SQLite storage,
-Discord bot construction, FFmpeg, local API contracts, and the companion
-pipeline. `pytest` runs the unit tests. `compileall` catches syntax/import-time
-issues without logging in to Discord. `uv lock --check` verifies `pyproject.toml`
-and `uv.lock` are aligned.
+`uv sync` installs locked dependencies. `python -m nuru_bot` runs the package.
+`nuru-bot-doctor` checks config, SQLite, Discord bot construction, FFmpeg, local
+API contracts, and the companion pipeline. `pytest` runs unit tests. `compileall`
+catches syntax/import-time issues without Discord login. `uv lock --check`
+verifies `pyproject.toml` and `uv.lock`.
 
 ## Coding Style & Naming Conventions
 
-Write Python 3.13-compatible code with 4-space indentation and type hints for
-public helpers. Prefer small modules with one clear responsibility. Use
+Write Python 3.13-compatible code with 4-space indentation and type hints.
+Prefer small modules with one clear responsibility. Use
 `snake_case` for functions and variables, `PascalCase` for classes, and
 uppercase names for constants such as `DEFAULT_API_BASE_URL`.
 
-Keep configuration environment-driven. Do not hardcode new Discord IDs, tokens,
-or service URLs outside `nuru_bot/config.py` defaults and `.env.example`.
+Keep configuration environment-driven. Do not hardcode Discord IDs, tokens, or
+service URLs outside `nuru_bot/config.py` defaults and `.env.example`.
 
 ## Testing Guidelines
 

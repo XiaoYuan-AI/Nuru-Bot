@@ -1,11 +1,13 @@
 import struct
 import wave
+import asyncio
 from pathlib import Path
 
 from nuru_bot.config import BotConfig, load_config
 from nuru_bot.diagnostics import (
     DiagnosticResult,
     check_api_contract,
+    check_discord_live,
     check_voice_sample,
     run_diagnostics,
 )
@@ -141,6 +143,72 @@ def test_run_diagnostics_can_include_voice_sample(tmp_path):
     assert report.results[-1].name == "voice sample"
 
 
+def test_check_discord_live_connects_and_disconnects(tmp_path):
+    bot = FakeLiveBot()
+    config = _config(tmp_path / "state.sqlite3", token="token")
+
+    result = asyncio.run(
+        check_discord_live(
+            config,
+            bot_factory=lambda config: bot,
+        )
+    )
+
+    assert result.ok
+    assert result.detail == "connected to voice channel 456"
+    assert bot.started_with_token == "token"
+    assert bot.voice_client.disconnected
+    assert bot.closed
+
+
+def test_check_discord_live_can_start_tts_playback(tmp_path):
+    bot = FakeLiveBot()
+    played = []
+
+    async def fake_tts_player(voice_client, api, config, text):
+        played.append((voice_client, api, text))
+
+    result = asyncio.run(
+        check_discord_live(
+            _config(tmp_path / "state.sqlite3", token="token"),
+            api=HealthyApi(),
+            speak_text="diagnostic speech",
+            bot_factory=lambda config: bot,
+            tts_player=fake_tts_player,
+        )
+    )
+
+    assert result.ok
+    assert result.detail == "connected to voice channel 456 and started TTS playback"
+    assert played[0][2] == "diagnostic speech"
+
+
+def test_check_discord_live_requires_token(tmp_path):
+    result = asyncio.run(
+        check_discord_live(
+            _config(tmp_path / "state.sqlite3", token=""),
+            bot_factory=lambda config: FakeLiveBot(),
+        )
+    )
+
+    assert not result.ok
+    assert "DISCORD_TOKEN" in result.detail
+
+
+def test_run_diagnostics_can_include_discord_live(tmp_path):
+    bot = FakeLiveBot()
+    report = run_diagnostics(
+        _config(tmp_path / "state.sqlite3", token="token"),
+        include_api=False,
+        include_ffmpeg=False,
+        include_discord_live=True,
+        live_bot_factory=lambda config: bot,
+    )
+
+    assert report.ok
+    assert report.results[-1].name == "discord live"
+
+
 def test_run_diagnostics_reports_registered_slash_commands(tmp_path):
     config = _config(tmp_path / "state.sqlite3", token="token")
 
@@ -169,8 +237,8 @@ def _config(database_path: Path, token: str) -> BotConfig:
         data_path=database_path,
         discord_proxy=None,
         activity_name="test",
-        guild_id=None,
-        voice_channel_id=None,
+        guild_id=123,
+        voice_channel_id=456,
         text_channel_id=None,
         connect_voice_on_ready=False,
         record_voice_audio=False,
@@ -196,3 +264,53 @@ def _write_wave(path: Path, sample_value: int) -> Path:
         wave_file.setframerate(16000)
         wave_file.writeframes(frames)
     return path
+
+
+class FakeLiveBot:
+    def __init__(self):
+        self.voice_client = FakeDiagnosticVoiceClient()
+        self.channel = FakeDiagnosticVoiceChannel(self.voice_client)
+        self.guild = FakeDiagnosticGuild(self.channel)
+        self.started_with_token = None
+        self.closed = False
+
+    def event(self, callback):
+        setattr(self, callback.__name__, callback)
+        return callback
+
+    def get_guild(self, guild_id):
+        return self.guild if guild_id == 123 else None
+
+    def get_channel(self, channel_id):
+        return self.channel if channel_id == 456 else None
+
+    async def start(self, token):
+        self.started_with_token = token
+        await self.on_ready()
+
+    async def close(self):
+        self.closed = True
+
+
+class FakeDiagnosticGuild:
+    def __init__(self, channel):
+        self.channel = channel
+
+    def get_channel(self, channel_id):
+        return self.channel if channel_id == 456 else None
+
+
+class FakeDiagnosticVoiceChannel:
+    def __init__(self, voice_client):
+        self.voice_client = voice_client
+
+    async def connect(self):
+        return self.voice_client
+
+
+class FakeDiagnosticVoiceClient:
+    def __init__(self):
+        self.disconnected = False
+
+    async def disconnect(self, *, force=False):
+        self.disconnected = force

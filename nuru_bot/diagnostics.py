@@ -8,13 +8,14 @@ import wave
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from .api import NuruApi, NuruApiError
 from .companion import CompanionService, InteractionRequest
 from .config import BotConfig, load_config
 from .memory import MemoryStore
 from .state import StateStore
-from .voice import HotwordDetector, VoiceActivityDetector
+from .voice import HotwordDetector, VoiceActivityDetector, play_tts_stream
 
 
 @dataclass(frozen=True)
@@ -47,7 +48,11 @@ def run_diagnostics(
     include_api: bool = True,
     include_ffmpeg: bool = True,
     voice_sample_path: str | Path | None = None,
+    include_discord_live: bool = False,
+    discord_live_speak_text: str | None = None,
+    discord_live_timeout_seconds: float = 30.0,
     ffmpeg_checker: Callable[[str], DiagnosticResult] | None = None,
+    live_bot_factory: Callable[[BotConfig], Any] | None = None,
 ) -> DiagnosticReport:
     results = [
         _check_discord_token(config),
@@ -61,7 +66,7 @@ def run_diagnostics(
 
     api_client: NuruApi | None = None
     own_api_client = False
-    if include_api or voice_sample_path is not None:
+    if include_api or voice_sample_path is not None or discord_live_speak_text:
         api_client = api or NuruApi(
             config.api_base_url,
             config.request_timeout_seconds,
@@ -75,6 +80,19 @@ def run_diagnostics(
 
         if voice_sample_path is not None and api_client is not None:
             results.append(check_voice_sample(api_client, config, voice_sample_path))
+
+        if include_discord_live:
+            results.append(
+                asyncio.run(
+                    check_discord_live(
+                        config,
+                        api=api_client,
+                        speak_text=discord_live_speak_text,
+                        timeout_seconds=discord_live_timeout_seconds,
+                        bot_factory=live_bot_factory,
+                    )
+                )
+            )
     finally:
         if own_api_client and api_client is not None:
             api_client.close()
@@ -249,6 +267,116 @@ def check_voice_sample(
     )
 
 
+async def check_discord_live(
+    config: BotConfig,
+    *,
+    api: NuruApi | None = None,
+    speak_text: str | None = None,
+    timeout_seconds: float = 30.0,
+    bot_factory: Callable[[BotConfig], Any] | None = None,
+    tts_player: Callable[[Any, NuruApi, BotConfig, str], Any] = play_tts_stream,
+) -> DiagnosticResult:
+    if not config.token:
+        return DiagnosticResult(
+            "discord live",
+            False,
+            "set DISCORD_TOKEN or TOKEN before running live Discord diagnostics",
+        )
+    if config.guild_id is None or config.voice_channel_id is None:
+        return DiagnosticResult(
+            "discord live",
+            False,
+            "DISCORD_GUILD_ID and DISCORD_VOICE_CHANNEL_ID are required",
+        )
+    if speak_text and api is None:
+        return DiagnosticResult(
+            "discord live",
+            False,
+            "live TTS playback requires API checks",
+        )
+
+    client = (bot_factory or _create_live_bot)(config)
+    loop = asyncio.get_running_loop()
+    ready_result: asyncio.Future[DiagnosticResult] = loop.create_future()
+
+    def finish(result: DiagnosticResult) -> None:
+        if not ready_result.done():
+            ready_result.set_result(result)
+
+    @client.event
+    async def on_ready() -> None:
+        voice_client = None
+        try:
+            guild = client.get_guild(config.guild_id)
+            if guild is None:
+                finish(
+                    DiagnosticResult(
+                        "discord live",
+                        False,
+                        f"guild {config.guild_id} was not found",
+                    )
+                )
+                return
+
+            channel = guild.get_channel(config.voice_channel_id)
+            if channel is None:
+                channel = client.get_channel(config.voice_channel_id)
+            if channel is None or not hasattr(channel, "connect"):
+                finish(
+                    DiagnosticResult(
+                        "discord live",
+                        False,
+                        f"voice channel {config.voice_channel_id} was not found",
+                    )
+                )
+                return
+
+            voice_client = await channel.connect()
+            detail = f"connected to voice channel {config.voice_channel_id}"
+            if speak_text and api is not None:
+                maybe_awaitable = tts_player(voice_client, api, config, speak_text)
+                if hasattr(maybe_awaitable, "__await__"):
+                    await maybe_awaitable
+                detail = f"{detail} and started TTS playback"
+
+            finish(DiagnosticResult("discord live", True, detail))
+        except Exception as exc:
+            finish(DiagnosticResult("discord live", False, str(exc)))
+        finally:
+            if voice_client is not None and hasattr(voice_client, "disconnect"):
+                await voice_client.disconnect(force=True)
+            await client.close()
+
+    start_task = asyncio.create_task(client.start(config.token))
+    try:
+        done, _ = await asyncio.wait(
+            {ready_result, start_task},
+            timeout=timeout_seconds,
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        if ready_result in done:
+            return ready_result.result()
+        if start_task in done:
+            exc = start_task.exception()
+            if exc is None:
+                return DiagnosticResult("discord live", False, "client stopped before ready")
+            return DiagnosticResult("discord live", False, str(exc))
+
+        await client.close()
+        return DiagnosticResult(
+            "discord live",
+            False,
+            f"timed out after {timeout_seconds:.1f}s",
+        )
+    finally:
+        if not start_task.done():
+            start_task.cancel()
+            try:
+                await start_task
+            except asyncio.CancelledError:
+                pass
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Check Nuru Bot runtime configuration and local service contracts.",
@@ -260,9 +388,28 @@ def main() -> None:
         type=Path,
         help="Audio file containing a wake-word phrase to test VAD, transcription, response, and TTS.",
     )
+    parser.add_argument(
+        "--discord-live",
+        action="store_true",
+        help="Log in, find the configured guild/channel, connect to voice, then disconnect.",
+    )
+    parser.add_argument(
+        "--discord-live-speak",
+        help="Text to play through TTS during --discord-live.",
+    )
+    parser.add_argument(
+        "--discord-live-timeout",
+        type=float,
+        default=30.0,
+        help="Seconds to wait for live Discord diagnostics.",
+    )
     args = parser.parse_args()
     if args.skip_api and args.voice_sample is not None:
         parser.error("--voice-sample requires API checks; remove --skip-api")
+    if args.discord_live_speak and not args.discord_live:
+        parser.error("--discord-live-speak requires --discord-live")
+    if args.skip_api and args.discord_live_speak:
+        parser.error("--discord-live-speak requires API checks; remove --skip-api")
 
     config = load_config(require_token=False)
     report = run_diagnostics(
@@ -270,6 +417,9 @@ def main() -> None:
         include_api=not args.skip_api,
         include_ffmpeg=not args.skip_ffmpeg,
         voice_sample_path=args.voice_sample,
+        include_discord_live=args.discord_live,
+        discord_live_speak_text=args.discord_live_speak,
+        discord_live_timeout_seconds=args.discord_live_timeout,
     )
     print(report.format_text())
     raise SystemExit(0 if report.ok else 1)
@@ -335,6 +485,15 @@ def _current_event_loop() -> asyncio.AbstractEventLoop | None:
         return asyncio.get_event_loop()
     except RuntimeError:
         return None
+
+
+def _create_live_bot(config: BotConfig) -> Any:
+    from discord import Bot, Intents
+
+    options: dict[str, str] = {}
+    if config.discord_proxy:
+        options["proxy"] = config.discord_proxy
+    return Bot(intents=Intents.all(), **options)
 
 
 def _has_tts_chunk(api: NuruApi) -> bool:

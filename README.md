@@ -77,6 +77,8 @@ Use the doctor command before live Discord testing:
 uv run nuru-bot-doctor
 uv run nuru-bot-doctor --skip-api
 uv run nuru-bot-doctor --voice-sample .\samples\hey-nuru.wav
+uv run nuru-bot-doctor --discord-live
+uv run nuru-bot-doctor --discord-live --discord-live-speak "Nuru live diagnostic"
 ```
 
 The doctor checks token configuration, SQLite storage, Discord bot construction,
@@ -85,3 +87,7 @@ generation, embeddings, transcription, TTS streaming, and the companion
 prompt/memory/state pipeline. With `--voice-sample`, it also validates VAD,
 transcription, wake-word detection, response generation, and TTS against a real
 audio file.
+
+Use `--discord-live` only when the bot token and configured guild/voice channel
+are ready. It logs in, connects to the configured voice channel, then disconnects.
+With `--discord-live-speak`, it also starts a TTS playback check.
