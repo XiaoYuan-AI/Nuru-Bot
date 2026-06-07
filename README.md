@@ -68,3 +68,16 @@ uv run python main.py
 uv run pytest
 uv run python -m compileall bot.py main.py nuru_bot tests
 ```
+
+## Runtime Diagnostics
+
+Use the doctor command before live Discord testing:
+
+```powershell
+uv run nuru-bot-doctor
+uv run nuru-bot-doctor --skip-api
+```
+
+The doctor checks token configuration, SQLite storage, FFmpeg, and the local
+Nuru API contracts for model generation, embeddings, transcription, and TTS
+streaming.

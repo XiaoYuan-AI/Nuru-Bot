@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from os import getenv
 from pathlib import Path
+from typing import Literal
 
 from dotenv import load_dotenv
 
@@ -15,6 +16,7 @@ DEFAULT_DATA_PATH = "data/nuru_bot.sqlite3"
 
 TRUE_VALUES = {"1", "true", "yes", "on"}
 FALSE_VALUES = {"0", "false", "no", "off", ""}
+ResponseModeName = Literal["text", "voice", "both"]
 
 
 @dataclass(frozen=True)
@@ -37,21 +39,21 @@ class BotConfig:
     idle_commentary_seconds: float
     voice_vad_threshold: float
     wake_words: tuple[str, ...]
-    default_response_mode: str
+    default_response_mode: ResponseModeName
     memory_context_limit: int
     tts_voice: str | None
     ffmpeg_executable: str
 
 
-def load_config() -> BotConfig:
+def load_config(*, require_token: bool = True) -> BotConfig:
     load_dotenv(dotenv_path=Path(".env"), override=False)
 
     token = _optional_env("DISCORD_TOKEN") or _optional_env("TOKEN")
-    if token is None:
+    if token is None and require_token:
         raise RuntimeError("Set DISCORD_TOKEN or TOKEN in the environment.")
 
     return BotConfig(
-        token=token,
+        token=token or "",
         api_base_url=_env("NURU_API_BASE_URL", DEFAULT_API_BASE_URL),
         request_timeout_seconds=_float_env("NURU_REQUEST_TIMEOUT_SECONDS", 30.0),
         data_path=Path(_env("NURU_DATA_PATH", DEFAULT_DATA_PATH)),
@@ -156,8 +158,8 @@ def _tuple_env(name: str, default: tuple[str, ...]) -> tuple[str, ...]:
     return parsed or default
 
 
-def _response_mode_env(name: str, default: str) -> str:
+def _response_mode_env(name: str, default: ResponseModeName) -> ResponseModeName:
     value = _env(name, default).lower()
     if value not in {"text", "voice", "both"}:
         raise ValueError(f"{name} must be text, voice, or both")
-    return value
+    return value  # type: ignore[return-value]

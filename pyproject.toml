@@ -16,6 +16,7 @@ dependencies = [
 
 [project.scripts]
 nuru-bot = "nuru_bot.bot:main"
+nuru-bot-doctor = "nuru_bot.diagnostics:main"
 
 [dependency-groups]
 dev = [

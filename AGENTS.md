@@ -26,15 +26,17 @@ Use `uv` for dependency and environment management.
 uv sync
 uv run python -m nuru_bot
 uv run python bot.py
+uv run nuru-bot-doctor
 uv run pytest
 uv run python -m compileall bot.py main.py nuru_bot
 uv lock --check
 ```
 
 `uv sync` installs locked dependencies. `python -m nuru_bot` runs the package
-entry point. `pytest` runs the unit tests. `compileall` catches syntax/import-time
-issues without logging in to Discord. `uv lock --check` verifies `pyproject.toml`
-and `uv.lock` are aligned.
+entry point. `nuru-bot-doctor` checks runtime configuration, SQLite storage,
+FFmpeg, and local API contracts. `pytest` runs the unit tests. `compileall`
+catches syntax/import-time issues without logging in to Discord. `uv lock
+--check` verifies `pyproject.toml` and `uv.lock` are aligned.
 
 ## Coding Style & Naming Conventions
 
