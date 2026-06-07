@@ -23,14 +23,23 @@ class HealthyApi:
     def transcribe_audio(self, audio_data):
         return ""
 
-    def stream_tts(self, text):
+    def stream_tts(self, text, *, voice=None):
         yield b"audio"
 
 
 class EmptyTtsApi(HealthyApi):
-    def stream_tts(self, text):
+    def stream_tts(self, text, *, voice=None):
         if False:
             yield b""
+
+
+class RecordingTtsApi(HealthyApi):
+    def __init__(self):
+        self.tts_requests = []
+
+    def stream_tts(self, text, *, voice=None):
+        self.tts_requests.append((text, voice))
+        yield b"audio"
 
 
 class VoiceSampleApi(HealthyApi):
@@ -89,6 +98,15 @@ def test_check_api_contract_fails_empty_tts_stream():
     tts_result = next(result for result in results if result.name == "api:tts-stream")
     assert not tts_result.ok
     assert tts_result.detail == "contract returned an empty response"
+
+
+def test_check_api_contract_uses_configured_tts_voice():
+    api = RecordingTtsApi()
+
+    results = check_api_contract(api, tts_voice="vtuber")
+
+    assert all(result.ok for result in results)
+    assert api.tts_requests == [("diagnostic tts", "vtuber")]
 
 
 def test_check_voice_sample_accepts_hotword_audio(tmp_path):

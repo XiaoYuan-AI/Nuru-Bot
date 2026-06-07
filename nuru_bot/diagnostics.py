@@ -75,7 +75,7 @@ def run_diagnostics(
 
     try:
         if include_api and api_client is not None:
-            results.extend(check_api_contract(api_client))
+            results.extend(check_api_contract(api_client, tts_voice=config.tts_voice))
             results.append(check_companion_pipeline(api_client, config))
 
         if voice_sample_path is not None and api_client is not None:
@@ -127,7 +127,11 @@ def check_ffmpeg(executable: str) -> DiagnosticResult:
     return DiagnosticResult("ffmpeg", True, first_line)
 
 
-def check_api_contract(api: NuruApi) -> list[DiagnosticResult]:
+def check_api_contract(
+    api: NuruApi,
+    *,
+    tts_voice: str | None = None,
+) -> list[DiagnosticResult]:
     checks = [
         ("api:model", lambda: bool(api.generate("diagnostic ping").strip())),
         ("api:embeddings", lambda: len(api.embed("diagnostic memory")) > 0),
@@ -135,7 +139,7 @@ def check_api_contract(api: NuruApi) -> list[DiagnosticResult]:
             "api:transcribe",
             lambda: api.transcribe_audio(_silent_wave_bytes()) is not None,
         ),
-        ("api:tts-stream", lambda: _has_tts_chunk(api)),
+        ("api:tts-stream", lambda: _has_tts_chunk(api, voice=tts_voice)),
     ]
 
     results: list[DiagnosticResult] = []
@@ -250,7 +254,7 @@ def check_voice_sample(
         if not response.text.strip():
             return DiagnosticResult("voice sample", False, "companion response was empty")
 
-        if not _has_tts_chunk_for_text(api, response.text):
+        if not _has_tts_chunk_for_text(api, response.text, voice=config.tts_voice):
             return DiagnosticResult("voice sample", False, "TTS stream returned no audio")
     except NuruApiError as exc:
         return DiagnosticResult("voice sample", False, str(exc))
@@ -512,12 +516,17 @@ def _create_live_bot(config: BotConfig) -> Any:
     return Bot(intents=Intents.all(), **options)
 
 
-def _has_tts_chunk(api: NuruApi) -> bool:
-    return _has_tts_chunk_for_text(api, "diagnostic tts")
+def _has_tts_chunk(api: NuruApi, *, voice: str | None = None) -> bool:
+    return _has_tts_chunk_for_text(api, "diagnostic tts", voice=voice)
 
 
-def _has_tts_chunk_for_text(api: NuruApi, text: str) -> bool:
-    for chunk in api.stream_tts(text):
+def _has_tts_chunk_for_text(
+    api: NuruApi,
+    text: str,
+    *,
+    voice: str | None = None,
+) -> bool:
+    for chunk in api.stream_tts(text, voice=voice):
         if chunk:
             return True
     return False
