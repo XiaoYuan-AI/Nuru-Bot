@@ -2,77 +2,63 @@
 
 ## Project Structure & Module Organization
 
-This Python Discord bot is packaged under `nuru_bot/`. Root files `bot.py` and
-`main.py` are compatibility launchers; keep runtime logic inside package modules.
+Nuru Bot is a Python 3.13 Discord bot packaged in `nuru_bot/`. Keep runtime
+logic in package modules; the root `bot.py` and `main.py` files are compatibility
+launchers only.
 
-- `nuru_bot/bot.py`: Discord client factory and application entry point.
-- `nuru_bot/config.py`: environment parsing and default settings.
-- `nuru_bot/api.py`: HTTP client for the local Nuru model and vision service.
-- `nuru_bot/memory.py`: SQLite long-term memory with stored embeddings.
-- `nuru_bot/state.py`: persisted mood, persona, and response preferences.
-- `nuru_bot/events.py`: Discord event handlers.
-- `nuru_bot/voice.py`: voice-channel connection and recording hooks.
-- `.env.example`: documented local configuration template.
+```text
+nuru_bot/
+  api.py          # Local Nuru HTTP client
+  bot.py          # Discord bot factory and entry point
+  commands.py     # Slash command registration
+  companion.py    # Prompt, memory, and response orchestration
+  config.py       # Environment-driven settings
+  events.py       # Discord event handlers
+  memory.py       # SQLite chat memory and embeddings
+  state.py        # Persisted mood, persona, preferences
+  voice.py        # Voice, recording, VAD, and TTS flow
+tests/            # Pytest unit tests and fakes
+.env.example      # Local configuration template
+```
 
-Tests live under `tests/` and avoid live Discord connections.
+No committed asset directory is required today; add one only when fixtures or
+media are needed by tests or docs.
 
 ## Build, Test, and Development Commands
 
-Use `uv` for dependency and environment management.
+Use `uv` for dependency and command execution.
 
-```powershell
-uv sync
-uv run python -m nuru_bot
-uv run python bot.py
-uv run nuru-bot-doctor
-uv run nuru-bot-doctor --voice-sample .\samples\hey-nuru.wav
-uv run nuru-bot-doctor --discord-live
-uv run pytest
-uv run python -m compileall bot.py main.py nuru_bot
-uv lock --check
-```
-
-`uv sync` installs locked dependencies. `python -m nuru_bot` runs the package.
-`nuru-bot-doctor` checks config, SQLite, Discord bot construction, FFmpeg, local
-API contracts, and the companion pipeline. `pytest` runs unit tests. `compileall`
-catches syntax/import-time issues without Discord login. `uv lock --check`
-verifies `pyproject.toml` and `uv.lock`.
+- `uv sync`: install locked dependencies.
+- `uv run python -m nuru_bot`: run the package entry point.
+- `uv run python bot.py`: run the legacy launcher.
+- `uv run pytest`: execute the test suite.
+- `uv run python -m compileall bot.py main.py nuru_bot tests`: catch syntax and import errors.
+- `uv lock --check`: verify `pyproject.toml` and `uv.lock` are synchronized.
+- `uv run nuru-bot-doctor`: run local diagnostics for config, storage, bot setup, API, and audio tooling.
 
 ## Coding Style & Naming Conventions
 
-Write Python 3.13-compatible code with 4-space indentation and type hints.
-Prefer small modules with one clear responsibility. Use
-`snake_case` for functions and variables, `PascalCase` for classes, and
-uppercase names for constants such as `DEFAULT_API_BASE_URL`.
-
-Keep configuration environment-driven. Do not hardcode Discord IDs, tokens, or
-service URLs outside `nuru_bot/config.py` defaults and `.env.example`.
+Use 4-space indentation, type hints for public helpers, and small modules with a
+single responsibility. Use `snake_case` for functions, variables, and modules;
+`PascalCase` for classes; and uppercase names for constants such as
+`DEFAULT_API_BASE_URL`. Keep configuration in `nuru_bot/config.py` and document
+new environment variables in `.env.example`.
 
 ## Testing Guidelines
 
-Use `pytest` conventions: files named `tests/test_*.py` and test functions named
-`test_*`. Mock Discord clients, HTTP calls, and environment variables rather than
-requiring network access. At minimum, cover config parsing, API error handling,
-memory persistence, state persistence, and prompt-building logic for changed
-behavior.
+Tests use `pytest` and live in `tests/test_*.py`; test functions should be named
+`test_*`. Prefer fakes and monkeypatched environment variables over live Discord,
+HTTP, or audio service calls. Cover config parsing, state and memory persistence,
+API error behavior, commands, voice runtime changes, and companion prompt flow.
 
 ## Commit & Pull Request Guidelines
 
-Use Conventional Commits, matching the current history:
+The history uses Conventional Commits, for example `feat: add live Discord
+diagnostics`, `fix: close vtuber runtime services`, and `test: cover command and
+config behavior`. Use `feat`, `fix`, `test`, `docs`, `refactor`, or `chore` with
+an imperative summary.
 
-```text
-feat: add new user-visible behavior
-fix: correct broken behavior
-refactor: reorganize code without changing intent
-chore: update tooling or metadata
-docs: update documentation
-```
-
-Pull requests should describe the change, list verification commands run, and
-call out any required environment variables or Discord permission changes.
-
-## Security & Configuration Tips
-
-Never commit `.env`, Discord tokens, logs, generated model data, or local virtual
-environments. Keep `.env.example` current when adding or renaming configuration
-variables.
+Pull requests should describe the behavior change, list verification commands,
+link related issues, and call out any new Discord permissions or environment
+variables. Never commit `.env`, tokens, local databases, logs, or virtual
+environments.
