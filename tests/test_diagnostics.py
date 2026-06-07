@@ -161,6 +161,24 @@ def test_check_discord_live_connects_and_disconnects(tmp_path):
     assert bot.closed
 
 
+def test_check_discord_live_waits_for_client_shutdown(tmp_path):
+    bot = SlowClosingLiveBot()
+
+    result = asyncio.run(
+        check_discord_live(
+            _config(tmp_path / "state.sqlite3", token="token"),
+            bot_factory=lambda config: bot,
+        )
+    )
+
+    assert result.ok
+    assert bot.close_started
+    assert bot.closed
+    assert not bot.close_cancelled
+    assert not bot.start_cancelled
+    assert bot.start_completed
+
+
 def test_check_discord_live_can_start_tts_playback(tmp_path):
     bot = FakeLiveBot()
     played = []
@@ -290,6 +308,33 @@ class FakeLiveBot:
         await self.on_ready()
 
     async def close(self):
+        self.closed = True
+
+
+class SlowClosingLiveBot(FakeLiveBot):
+    def __init__(self):
+        super().__init__()
+        self.close_started = False
+        self.close_cancelled = False
+        self.start_cancelled = False
+        self.start_completed = False
+
+    async def start(self, token):
+        self.started_with_token = token
+        try:
+            await self.on_ready()
+        except asyncio.CancelledError:
+            self.start_cancelled = True
+            raise
+        self.start_completed = True
+
+    async def close(self):
+        self.close_started = True
+        try:
+            await asyncio.sleep(0)
+        except asyncio.CancelledError:
+            self.close_cancelled = True
+            raise
         self.closed = True
 
 

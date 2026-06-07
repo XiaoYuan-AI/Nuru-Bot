@@ -345,7 +345,6 @@ async def check_discord_live(
         finally:
             if voice_client is not None and hasattr(voice_client, "disconnect"):
                 await voice_client.disconnect(force=True)
-            await client.close()
 
     start_task = asyncio.create_task(client.start(config.token))
     try:
@@ -355,8 +354,12 @@ async def check_discord_live(
             return_when=asyncio.FIRST_COMPLETED,
         )
         if ready_result in done:
-            return ready_result.result()
+            result = ready_result.result()
+            await client.close()
+            await _wait_for_live_shutdown(client, start_task)
+            return result
         if start_task in done:
+            await client.close()
             exc = start_task.exception()
             if exc is None:
                 return DiagnosticResult("discord live", False, "client stopped before ready")
@@ -370,11 +373,24 @@ async def check_discord_live(
         )
     finally:
         if not start_task.done():
+            await client.close()
             start_task.cancel()
             try:
                 await start_task
             except asyncio.CancelledError:
                 pass
+
+
+async def _wait_for_live_shutdown(client: Any, start_task: asyncio.Task[Any]) -> None:
+    if start_task.done():
+        return
+
+    try:
+        await asyncio.wait_for(asyncio.shield(start_task), timeout=5.0)
+    except TimeoutError:
+        await client.close()
+    except Exception:
+        return
 
 
 def main() -> None:
@@ -482,7 +498,7 @@ def _check_bot_runtime(config: BotConfig) -> DiagnosticResult:
 
 def _current_event_loop() -> asyncio.AbstractEventLoop | None:
     try:
-        return asyncio.get_event_loop()
+        return asyncio.get_running_loop()
     except RuntimeError:
         return None
 
