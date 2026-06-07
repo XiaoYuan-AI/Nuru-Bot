@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 import sqlite3
 import threading
 from hashlib import sha256
@@ -9,6 +10,9 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Iterable
+
+
+TOKEN_PATTERN = re.compile(r"[a-z0-9_']+")
 
 
 @dataclass(frozen=True)
@@ -193,7 +197,7 @@ class MemoryStore:
 
 def fallback_embedding(text: str, dimensions: int = 64) -> list[float]:
     vector = [0.0] * dimensions
-    for token in text.lower().split():
+    for token in _tokenize(text):
         digest = sha256(token.encode("utf-8")).digest()
         index = int.from_bytes(digest[:4], "big") % dimensions
         vector[index] += 1.0
@@ -217,3 +221,7 @@ def _cosine_similarity(left: list[float], right: list[float]) -> float:
     if left_norm == 0 or right_norm == 0:
         return 0.0
     return numerator / (left_norm * right_norm)
+
+
+def _tokenize(text: str) -> list[str]:
+    return TOKEN_PATTERN.findall(text.lower())

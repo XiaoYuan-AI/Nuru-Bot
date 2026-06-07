@@ -37,6 +37,33 @@ def test_memory_store_persists_recent_and_searches_embeddings(tmp_path):
     assert "rhythm" in matches[0].content.lower()
 
 
+def test_fallback_embedding_ignores_punctuation_for_memory_search(tmp_path):
+    store = MemoryStore(tmp_path / "memory.sqlite3")
+    store.add_entry(
+        user_id="user-1",
+        channel_id="channel-1",
+        role="user",
+        content="I like osu!",
+        embedding=fallback_embedding("I like osu!"),
+    )
+    store.add_entry(
+        user_id="user-1",
+        channel_id="channel-1",
+        role="user",
+        content="I like cooking",
+        embedding=fallback_embedding("I like cooking"),
+    )
+
+    matches = store.search(
+        query_embedding=fallback_embedding("osu"),
+        user_id="user-1",
+        channel_id="channel-1",
+        limit=1,
+    )
+
+    assert matches[0].content == "I like osu!"
+
+
 def test_memory_reset_can_target_channel(tmp_path):
     store = MemoryStore(tmp_path / "memory.sqlite3")
     store.add_entry(
