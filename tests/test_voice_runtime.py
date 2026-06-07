@@ -128,6 +128,23 @@ class FakeSink:
         self.audio_data = audio_data
 
 
+class BrokenSink:
+    audio_data = None
+
+
+class BrokenAudio:
+    file = None
+
+    def __init__(self):
+        self.file = self
+
+    def seek(self, offset):
+        pass
+
+    def read(self):
+        raise RuntimeError("audio file unavailable")
+
+
 def test_recording_callback_ignores_audio_without_hotword():
     companion = FakeCompanion()
     runtime = CapturingVoiceRuntime(
@@ -308,6 +325,54 @@ def test_recording_callback_restarts_recording_when_transcription_crashes():
 
     async def run_callback():
         await runtime.recording_callback(FakeSink({123: _loud_pcm()}), voice_client)
+        runtime.close()
+        await asyncio.sleep(0)
+
+    asyncio.run(run_callback())
+
+    assert voice_client.started
+    assert voice_client.recording
+    assert runtime.spoken == []
+
+
+def test_recording_callback_restarts_recording_when_sink_audio_is_invalid():
+    runtime = CapturingVoiceRuntime(
+        config=make_config(
+            record_voice_audio=True,
+            recording_segment_seconds=10,
+            voice_vad_threshold=10,
+        ),
+        api=FakeApi("hey nuru"),
+        companion=FakeCompanion(),
+    )
+    voice_client = FakeRecordingVoiceClient()
+
+    async def run_callback():
+        await runtime.recording_callback(BrokenSink(), voice_client)
+        runtime.close()
+        await asyncio.sleep(0)
+
+    asyncio.run(run_callback())
+
+    assert voice_client.started
+    assert voice_client.recording
+    assert runtime.spoken == []
+
+
+def test_recording_callback_restarts_recording_when_audio_read_crashes():
+    runtime = CapturingVoiceRuntime(
+        config=make_config(
+            record_voice_audio=True,
+            recording_segment_seconds=10,
+            voice_vad_threshold=10,
+        ),
+        api=FakeApi("hey nuru"),
+        companion=FakeCompanion(),
+    )
+    voice_client = FakeRecordingVoiceClient()
+
+    async def run_callback():
+        await runtime.recording_callback(FakeSink({123: BrokenAudio()}), voice_client)
         runtime.close()
         await asyncio.sleep(0)
 

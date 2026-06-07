@@ -158,9 +158,15 @@ class VoiceRuntime:
         sink: sinks.WaveSink,
         voice_client: VoiceClient,
     ) -> None:
-        for user_id, audio in sink.audio_data.items():
-            audio_bytes = extract_audio_bytes(audio)
-            if not self.vad.detects_speech(audio_bytes):
+        for user_id, audio in _sink_audio_items(sink):
+            try:
+                audio_bytes = extract_audio_bytes(audio)
+                speech_detected = self.vad.detects_speech(audio_bytes)
+            except Exception:
+                LOGGER.exception("Failed to inspect recorded voice audio")
+                continue
+
+            if not speech_detected:
                 continue
 
             self.last_voice_activity_at = time.monotonic()
@@ -350,6 +356,19 @@ def extract_audio_bytes(audio: object) -> bytes:
         return audio
 
     return b""
+
+
+def _sink_audio_items(sink: object) -> list[tuple[object, object]]:
+    audio_data = getattr(sink, "audio_data", None)
+    items = getattr(audio_data, "items", None)
+    if items is None:
+        return []
+
+    try:
+        return list(items())
+    except Exception:
+        LOGGER.exception("Failed to read voice sink audio data")
+        return []
 
 
 def _extract_pcm(audio_data: bytes) -> bytes:
