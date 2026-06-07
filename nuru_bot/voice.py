@@ -97,9 +97,11 @@ class VoiceRuntime:
         self.last_voice_activity_at = time.monotonic()
         self.last_idle_commentary_at = 0.0
         self.voice_client: VoiceClient | None = None
+        self.client: Client | None = None
         self._idle_task: asyncio.Task[None] | None = None
 
     async def connect(self, client: Client) -> VoiceClient | None:
+        self.client = client
         voice_client = await connect_voice_channel(client, self.config)
         self.voice_client = voice_client
 
@@ -149,7 +151,12 @@ class VoiceRuntime:
                 )
             )
             if response.response_mode in {"text", "both"}:
-                await _send_channel_text(voice_client, response.text)
+                await _send_channel_text(
+                    self.client,
+                    self.config,
+                    voice_client,
+                    response.text,
+                )
             if response.response_mode in {"voice", "both"}:
                 await self.speak(voice_client, response.text)
 
@@ -281,7 +288,19 @@ def _single_human_member(voice_client: VoiceClient) -> object | None:
     return human_members[0]
 
 
-async def _send_channel_text(voice_client: VoiceClient, text: str) -> None:
+async def _send_channel_text(
+    client: Client | None,
+    config: BotConfig,
+    voice_client: VoiceClient,
+    text: str,
+) -> None:
+    if client is not None and config.text_channel_id is not None:
+        configured_channel = client.get_channel(config.text_channel_id)
+        configured_send = getattr(configured_channel, "send", None)
+        if configured_send is not None:
+            await configured_send(text)
+            return
+
     channel = getattr(voice_client, "channel", None)
     send = getattr(channel, "send", None)
     if send is None:

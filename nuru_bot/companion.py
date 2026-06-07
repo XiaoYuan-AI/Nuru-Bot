@@ -65,7 +65,7 @@ class CompanionService:
         response_text = self.api.generate(prompt)
 
         self.memory.add_entry(
-            user_id="assistant",
+            user_id=request.user_id,
             channel_id=request.channel_id,
             role="assistant",
             content=response_text,

@@ -27,6 +27,7 @@ class BotConfig:
     activity_name: str
     guild_id: int | None
     voice_channel_id: int | None
+    text_channel_id: int | None
     connect_voice_on_ready: bool
     record_voice_audio: bool
     enable_text_chat: bool
@@ -61,6 +62,7 @@ def load_config() -> BotConfig:
             "DISCORD_VOICE_CHANNEL_ID",
             DEFAULT_VOICE_CHANNEL_ID,
         ),
+        text_channel_id=_optional_int_env("DISCORD_TEXT_CHANNEL_ID"),
         connect_voice_on_ready=_bool_env("NURU_CONNECT_VOICE_ON_READY", True),
         record_voice_audio=_bool_env("NURU_RECORD_VOICE_AUDIO", False),
         enable_text_chat=_bool_env(
