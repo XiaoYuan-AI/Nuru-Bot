@@ -76,6 +76,47 @@ def test_handle_dm_reaction_honors_voice_response_mode(monkeypatch):
     ]
 
 
+def test_handle_text_message_sends_fallback_when_companion_crashes(monkeypatch):
+    monkeypatch.setattr(events, "DMChannel", FakeDmChannel)
+    channel = FakeDmChannel()
+    message = FakeTextEventMessage(channel=channel, content="hello")
+    companion = CrashingCompanion(_response("text"))
+    voice_runtime = FakeVoiceRuntime(connected=False)
+
+    asyncio.run(
+        events.handle_text_message(
+            FakeClient(),
+            message,
+            companion,
+            voice_runtime,
+        )
+    )
+
+    assert channel.sent == ["I could not finish that response."]
+    assert companion.requests[0].content == "hello"
+
+
+def test_handle_dm_reaction_sends_fallback_when_companion_crashes(monkeypatch):
+    monkeypatch.setattr(events, "DMChannel", FakeDmChannel)
+    channel = FakeDmChannel()
+    user = FakeUser()
+    companion = CrashingCompanion(_response("text"))
+    voice_runtime = FakeVoiceRuntime(connected=False)
+
+    asyncio.run(
+        events.handle_dm_reaction(
+            FakeClient(),
+            FakeReaction(FakeMessage(channel)),
+            user,
+            companion,
+            voice_runtime,
+        )
+    )
+
+    assert channel.sent == ["I could not finish that response."]
+    assert companion.requests[0].content == "tester_name's reaction is: :sparkles:"
+
+
 def test_message_prompt_parts_ignores_empty_content_after_bot_mention():
     mention = FakeMention(bot=True, mention="<@999>")
     message = FakeTextMessage(content="<@999>   ", mentions=[mention])
@@ -193,6 +234,12 @@ class FakeCompanion:
         return self.response
 
 
+class CrashingCompanion(FakeCompanion):
+    async def respond(self, request):
+        self.requests.append(request)
+        raise RuntimeError("state store unavailable")
+
+
 class FakeApi:
     def __init__(self, describe_error=None):
         self.describe_error = describe_error
@@ -216,6 +263,15 @@ class FakeUser:
 class FakeMessage:
     def __init__(self, channel):
         self.channel = channel
+
+
+class FakeTextEventMessage:
+    def __init__(self, *, channel, content):
+        self.author = FakeUser()
+        self.channel = channel
+        self.content = content
+        self.attachments = []
+        self.mentions = []
 
 
 class FakeTextMessage:

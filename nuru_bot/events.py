@@ -72,7 +72,19 @@ async def handle_text_message(
         )
     except NuruApiError:
         LOGGER.exception("Failed to generate a text response")
-        await message.channel.send("The local model service did not return a response.")
+        await _send_channel_message(
+            message.channel,
+            "The local model service did not return a response.",
+            failure_log="Failed to send text model failure fallback",
+        )
+        return
+    except Exception:
+        LOGGER.exception("Unexpected text response failure")
+        await _send_channel_message(
+            message.channel,
+            "I could not finish that response.",
+            failure_log="Failed to send text error fallback",
+        )
         return
 
     await deliver_interaction_response(message.channel, response, voice_runtime)
@@ -104,8 +116,18 @@ async def handle_dm_reaction(
         )
     except NuruApiError:
         LOGGER.exception("Failed to generate a reaction response")
-        await reaction.message.channel.send(
-            "The local model service did not return a response."
+        await _send_channel_message(
+            reaction.message.channel,
+            "The local model service did not return a response.",
+            failure_log="Failed to send reaction model failure fallback",
+        )
+        return
+    except Exception:
+        LOGGER.exception("Unexpected reaction response failure")
+        await _send_channel_message(
+            reaction.message.channel,
+            "I could not finish that response.",
+            failure_log="Failed to send reaction error fallback",
         )
         return
 
