@@ -76,8 +76,12 @@ class CrashingSpeakVoiceRuntime(CapturingVoiceRuntime):
 
 
 class FakeVoiceClient:
-    def __init__(self, *, members=None, playing=False):
-        self.channel = type("Channel", (), {"id": 42, "members": members or []})()
+    def __init__(self, *, members=None, playing=False, channel=None):
+        self.channel = channel or type(
+            "Channel",
+            (),
+            {"id": 42, "members": members or []},
+        )()
         self.playing = playing
         self.played_sources = []
         self.stopped = False
@@ -201,6 +205,40 @@ def test_recording_callback_sends_text_to_configured_channel():
     asyncio.run(runtime.recording_callback(FakeSink({123: _loud_pcm()}), FakeVoiceClient()))
 
     assert sent_messages == ["voice reply"]
+    assert runtime.spoken == []
+
+
+def test_recording_callback_falls_back_to_voice_channel_when_configured_text_fails():
+    companion = FakeCompanion(response_mode="text")
+    runtime = CapturingVoiceRuntime(
+        config=make_config(voice_vad_threshold=10, text_channel_id=99),
+        api=FakeApi("nuru respond in text"),
+        companion=companion,
+    )
+    fallback_channel = FakeSendChannel()
+    failing_text_channel = type(
+        "TextChannel",
+        (),
+        {"send": lambda self, text: _raise_async(RuntimeError("send failed"))},
+    )()
+    runtime.client = type(
+        "Client",
+        (),
+        {
+            "get_channel": (
+                lambda self, channel_id: failing_text_channel if channel_id == 99 else None
+            )
+        },
+    )()
+
+    asyncio.run(
+        runtime.recording_callback(
+            FakeSink({123: _loud_pcm()}),
+            FakeVoiceClient(channel=fallback_channel),
+        )
+    )
+
+    assert fallback_channel.sent == ["voice reply"]
     assert runtime.spoken == []
 
 
@@ -490,6 +528,21 @@ def _loud_pcm():
 
 async def _append_async(messages, text):
     messages.append(text)
+
+
+async def _raise_async(error):
+    raise error
+
+
+class FakeSendChannel:
+    id = 42
+    members = []
+
+    def __init__(self):
+        self.sent = []
+
+    async def send(self, text):
+        self.sent.append(text)
 
 
 class FakeConnectClient:

@@ -428,8 +428,11 @@ async def _send_channel_text(
         configured_channel = client.get_channel(config.text_channel_id)
         configured_send = getattr(configured_channel, "send", None)
         if configured_send is not None:
-            await configured_send(text)
-            return
+            try:
+                await configured_send(text)
+                return
+            except Exception:
+                LOGGER.exception("Failed to send voice text to configured channel")
 
     channel = getattr(voice_client, "channel", None)
     send = getattr(channel, "send", None)
