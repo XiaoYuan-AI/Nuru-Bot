@@ -47,12 +47,7 @@ class CompanionService:
         user_embedding = self.embed_text(request.content)
         mood = self.state.adjust_mood_from_text(request.content)
         persona = self.state.get_persona()
-        memories = self.memory.search(
-            query_embedding=user_embedding,
-            user_id=request.user_id,
-            channel_id=request.channel_id,
-            limit=self.config.memory_context_limit,
-        )
+        memories = self.find_relevant_memories(request, user_embedding)
         self.memory.add_entry(
             user_id=request.user_id,
             channel_id=request.channel_id,
@@ -128,6 +123,41 @@ class CompanionService:
     ) -> int:
         return self.memory.reset(user_id=user_id, channel_id=channel_id)
 
+    def find_relevant_memories(
+        self,
+        request: InteractionRequest,
+        query_embedding: list[float],
+    ) -> list[MemoryEntry]:
+        limit = max(0, self.config.memory_context_limit)
+        if limit == 0:
+            return []
+
+        scopes = (
+            (request.user_id, request.channel_id),
+            (request.user_id, None),
+            (None, request.channel_id),
+        )
+        memories: list[MemoryEntry] = []
+        seen_ids: set[int] = set()
+
+        for user_id, channel_id in scopes:
+            matches = self.memory.search(
+                query_embedding=query_embedding,
+                user_id=user_id,
+                channel_id=channel_id,
+                limit=limit,
+            )
+            for entry in matches:
+                if entry.id in seen_ids:
+                    continue
+
+                memories.append(entry)
+                seen_ids.add(entry.id)
+                if len(memories) >= limit:
+                    return memories
+
+        return memories
+
     def build_prompt(
         self,
         request: InteractionRequest,
@@ -136,7 +166,10 @@ class CompanionService:
         memories: list[MemoryEntry],
     ) -> str:
         memory_lines = "\n".join(
-            f"- {entry.role} in channel {entry.channel_id}: {entry.content}"
+            (
+                f"- {entry.role} for user {entry.user_id} "
+                f"in channel {entry.channel_id}: {entry.content}"
+            )
             for entry in memories
         )
         if not memory_lines:

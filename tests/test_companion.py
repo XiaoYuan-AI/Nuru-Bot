@@ -77,6 +77,48 @@ def test_companion_prompt_does_not_treat_current_message_as_memory():
     assert prompt.count("brand new active turn") == 1
 
 
+def test_companion_prompt_uses_user_and_channel_memory_context():
+    api = FakeApi()
+    memory = MemoryStore(":memory:")
+    state = StateStore(":memory:")
+    memory.add_entry(
+        user_id="user-1",
+        channel_id="channel-2",
+        role="user",
+        content="I love rhythm games",
+        embedding=[1.0],
+    )
+    memory.add_entry(
+        user_id="user-2",
+        channel_id="channel-1",
+        role="user",
+        content="This channel likes karaoke",
+        embedding=[1.0],
+    )
+    service = CompanionService(
+        api=api,
+        memory=memory,
+        state=state,
+        config=make_config(memory_context_limit=4),
+    )
+
+    asyncio.run(
+        service.respond(
+            InteractionRequest(
+                user_id="user-1",
+                channel_id="channel-1",
+                author_name="Tester",
+                content="what do you remember?",
+                source="text",
+            )
+        )
+    )
+
+    prompt = api.prompts[0]
+    assert "user for user user-1 in channel channel-2: I love rhythm games" in prompt
+    assert "user for user user-2 in channel channel-1: This channel likes karaoke" in prompt
+
+
 def test_idle_prompt_uses_recent_scoped_memories():
     api = FakeApi()
     memory = MemoryStore(":memory:")
