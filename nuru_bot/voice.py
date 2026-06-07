@@ -181,6 +181,9 @@ class VoiceRuntime:
             except NuruApiError:
                 LOGGER.exception("Failed to generate a voice response")
                 continue
+            except Exception:
+                LOGGER.exception("Unexpected voice response generation failure")
+                continue
 
             try:
                 if response.response_mode in {"text", "both"}:

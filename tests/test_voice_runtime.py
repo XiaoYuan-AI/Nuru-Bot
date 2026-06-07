@@ -50,6 +50,12 @@ class FailingCompanion(FakeCompanion):
         raise NuruApiError("model unavailable")
 
 
+class CrashingCompanion(FakeCompanion):
+    async def respond(self, request):
+        self.requests.append(request)
+        raise RuntimeError("memory database unavailable")
+
+
 class CapturingVoiceRuntime(VoiceRuntime):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -214,6 +220,32 @@ def test_recording_callback_restarts_recording_when_companion_fails():
     asyncio.run(run_callback())
 
     assert companion.requests[0].content == "hey nuru fail safely"
+    assert voice_client.started
+    assert voice_client.recording
+    assert runtime.spoken == []
+
+
+def test_recording_callback_restarts_recording_when_companion_crashes():
+    companion = CrashingCompanion()
+    runtime = CapturingVoiceRuntime(
+        config=make_config(
+            record_voice_audio=True,
+            recording_segment_seconds=10,
+            voice_vad_threshold=10,
+        ),
+        api=FakeApi("hey nuru recover safely"),
+        companion=companion,
+    )
+    voice_client = FakeRecordingVoiceClient()
+
+    async def run_callback():
+        await runtime.recording_callback(FakeSink({123: _loud_pcm()}), voice_client)
+        runtime.close()
+        await asyncio.sleep(0)
+
+    asyncio.run(run_callback())
+
+    assert companion.requests[0].content == "hey nuru recover safely"
     assert voice_client.started
     assert voice_client.recording
     assert runtime.spoken == []
