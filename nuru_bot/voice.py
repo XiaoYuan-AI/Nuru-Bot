@@ -272,7 +272,7 @@ class VoiceRuntime:
                 self.companion.idle_prompt,
                 user_id=str(alone_user.id),
                 channel_id=_voice_channel_id(voice_client),
-                author_name=alone_user.display_name,
+                author_name=_member_display_name(alone_user),
             )
             await self.speak(voice_client, text)
             self.last_idle_commentary_at = time.monotonic()
@@ -383,11 +383,23 @@ def _voice_author_name(voice_client: VoiceClient, user_id: object) -> str:
         if display_name:
             return str(display_name)
 
-        name = getattr(member, "name", None)
+        name = _member_display_name(member)
         if name:
-            return str(name)
+            return name
 
     return str(user_id)
+
+
+def _member_display_name(member: object) -> str:
+    display_name = getattr(member, "display_name", None)
+    if display_name:
+        return str(display_name)
+
+    name = getattr(member, "name", None)
+    if name:
+        return str(name)
+
+    return str(getattr(member, "id", "unknown"))
 
 
 def _single_human_member(voice_client: VoiceClient) -> object | None:

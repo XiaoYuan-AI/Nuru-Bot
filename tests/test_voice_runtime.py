@@ -396,6 +396,23 @@ def test_idle_commentary_runs_after_silence_when_one_user_is_alone():
     assert runtime.last_idle_commentary_at > 0.0
 
 
+def test_idle_commentary_uses_member_name_when_display_name_is_unavailable():
+    user = type("Member", (), {"id": 321, "name": "SoloName", "bot": False})()
+    companion = FakeCompanion()
+    runtime = CapturingVoiceRuntime(
+        config=make_config(idle_commentary_seconds=30),
+        api=FakeApi("nuru"),
+        companion=companion,
+    )
+    runtime.voice_client = FakeVoiceClient(members=[user])
+    runtime.last_voice_activity_at = 0.0
+    runtime.last_idle_commentary_at = 0.0
+
+    assert asyncio.run(runtime.maybe_run_idle_commentary())
+    assert companion.idle_requests == [("321", "42", "SoloName")]
+    assert runtime.spoken == ["idle reply"]
+
+
 def test_idle_commentary_returns_false_when_delivery_crashes():
     user = type("Member", (), {"id": 321, "display_name": "Solo", "bot": False})()
     companion = FakeCompanion()
