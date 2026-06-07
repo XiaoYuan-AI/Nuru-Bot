@@ -70,6 +70,13 @@ uv run pytest
 uv run python -m compileall bot.py main.py nuru_bot tests
 ```
 
+## Slash Commands
+
+- `/memory_reset scope:me|channel`: clear remembered messages for yourself or the channel.
+- `/mood`: show the persisted mood and personality state.
+- `/personality persona:nuru|supportive|chaotic`: swap the persisted personality.
+- `/response_mode mode:text|voice|both|default scope:me|channel`: choose response delivery or clear a stored preference with `default`.
+
 ## Runtime Diagnostics
 
 Use the doctor command before live Discord testing:

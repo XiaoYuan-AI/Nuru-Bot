@@ -133,6 +133,25 @@ class StateStore:
                 (scope_type, scope_id, mode, _now()),
             )
 
+    def clear_response_mode(
+        self,
+        *,
+        scope_type: Literal["user", "channel"],
+        scope_id: str,
+    ) -> int:
+        if scope_type not in {"user", "channel"}:
+            raise ValueError("scope_type must be user or channel")
+
+        with self._lock, self._connection:
+            cursor = self._connection.execute(
+                """
+                DELETE FROM response_preferences
+                WHERE scope_type = ? AND scope_id = ?
+                """,
+                (scope_type, scope_id),
+            )
+            return int(cursor.rowcount)
+
     def get_response_mode(
         self,
         *,

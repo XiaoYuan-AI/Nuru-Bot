@@ -38,6 +38,39 @@ def test_user_response_mode_overrides_channel_default(tmp_path):
     )
 
 
+def test_clear_response_mode_restores_fallback(tmp_path):
+    store = StateStore(tmp_path / "state.sqlite3")
+    store.set_response_mode(scope_type="channel", scope_id="channel-1", mode="voice")
+    store.set_response_mode(scope_type="user", scope_id="user-1", mode="both")
+
+    assert (
+        store.get_response_mode(
+            user_id="user-1",
+            channel_id="channel-1",
+            default="text",
+        )
+        == "both"
+    )
+    assert store.clear_response_mode(scope_type="user", scope_id="user-1") == 1
+    assert (
+        store.get_response_mode(
+            user_id="user-1",
+            channel_id="channel-1",
+            default="text",
+        )
+        == "voice"
+    )
+    assert store.clear_response_mode(scope_type="channel", scope_id="channel-1") == 1
+    assert (
+        store.get_response_mode(
+            user_id="user-1",
+            channel_id="channel-1",
+            default="text",
+        )
+        == "text"
+    )
+
+
 def test_mood_adjusts_from_sentiment_words(tmp_path):
     store = StateStore(tmp_path / "state.sqlite3")
 

@@ -89,6 +89,44 @@ def test_response_mode_helper_sets_user_and_channel_preferences(tmp_path):
     ) == "voice"
 
 
+def test_response_mode_helper_clears_user_and_channel_preferences(tmp_path):
+    state = StateStore(tmp_path / "state.sqlite3")
+    state.set_response_mode(scope_type="channel", scope_id="channel-1", mode="voice")
+    state.set_response_mode(scope_type="user", scope_id="user-1", mode="both")
+
+    assert (
+        set_response_mode_for_scope(
+            state,
+            mode="default",
+            scope="me",
+            user_id="user-1",
+            channel_id="channel-1",
+        )
+        == "Your response mode preference was cleared."
+    )
+    assert state.get_response_mode(
+        user_id="user-1",
+        channel_id="channel-1",
+        default="text",
+    ) == "voice"
+
+    assert (
+        set_response_mode_for_scope(
+            state,
+            mode="default",
+            scope="channel",
+            user_id="user-1",
+            channel_id="channel-1",
+        )
+        == "Channel response mode preference cleared."
+    )
+    assert state.get_response_mode(
+        user_id="user-1",
+        channel_id="channel-1",
+        default="text",
+    ) == "text"
+
+
 def test_response_mode_helper_rejects_invalid_mode(tmp_path):
     state = StateStore(tmp_path / "state.sqlite3")
 

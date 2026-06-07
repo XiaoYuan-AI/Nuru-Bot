@@ -59,7 +59,7 @@ def register_commands(
     )
     async def response_mode(
         ctx: discord.ApplicationContext,
-        mode: discord.Option(str, choices=["text", "voice", "both"]),
+        mode: discord.Option(str, choices=["text", "voice", "both", "default"]),
         scope: discord.Option(str, choices=["me", "channel"]) = "me",
     ) -> None:
         message = set_response_mode_for_scope(
@@ -112,6 +112,23 @@ def set_response_mode_for_scope(
     user_id: str,
     channel_id: str,
 ) -> str:
+    if mode == "default":
+        if scope == "channel":
+            state.clear_response_mode(
+                scope_type="channel",
+                scope_id=channel_id,
+            )
+            return "Channel response mode preference cleared."
+
+        if scope != "me":
+            raise ValueError("scope must be me or channel")
+
+        state.clear_response_mode(
+            scope_type="user",
+            scope_id=user_id,
+        )
+        return "Your response mode preference was cleared."
+
     response_mode_value: ResponseMode = _coerce_response_mode(mode)
     if scope == "channel":
         state.set_response_mode(
