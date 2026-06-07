@@ -11,17 +11,20 @@ from .helpers import make_config
 class FakeApi:
     def __init__(self, transcript):
         self.transcript = transcript
+        self.tts_requests = []
 
     def transcribe_audio(self, audio_data):
         return self.transcript
 
     def stream_tts(self, text, *, voice=None):
+        self.tts_requests.append((text, voice))
         yield b"audio"
 
 
 class FakeCompanion:
     def __init__(self, response_mode="voice"):
         self.requests = []
+        self.idle_requests = []
         self.response_mode = response_mode
 
     async def respond(self, request):
@@ -32,6 +35,10 @@ class FakeCompanion:
             mood=MoodState(label="curious", energy=0.5, updated_at="now"),
             persona=PersonaState(name="nuru", prompt="test", updated_at="now"),
         )
+
+    def idle_prompt(self, *, user_id, channel_id, author_name):
+        self.idle_requests.append((user_id, channel_id, author_name))
+        return "idle reply"
 
 
 class CapturingVoiceRuntime(VoiceRuntime):
@@ -44,11 +51,24 @@ class CapturingVoiceRuntime(VoiceRuntime):
 
 
 class FakeVoiceClient:
-    def __init__(self):
-        self.channel = type("Channel", (), {"id": 42})()
+    def __init__(self, *, members=None, playing=False):
+        self.channel = type("Channel", (), {"id": 42, "members": members or []})()
+        self.playing = playing
+        self.played_sources = []
+        self.stopped = False
 
     def is_connected(self):
         return True
+
+    def is_playing(self):
+        return self.playing
+
+    def stop(self):
+        self.stopped = True
+        self.playing = False
+
+    def play(self, source):
+        self.played_sources.append(source)
 
 
 class FakeSink:
@@ -114,6 +134,65 @@ def test_recording_callback_sends_text_to_configured_channel():
 
     assert sent_messages == ["voice reply"]
     assert runtime.spoken == []
+
+
+def test_speak_streams_tts_chunks_into_ffmpeg_source(monkeypatch):
+    captured_audio = []
+
+    class FakeAudioSource:
+        def __init__(self, stream, *, pipe, executable):
+            captured_audio.append((stream.read(), pipe, executable))
+
+    monkeypatch.setattr("nuru_bot.voice.FFmpegPCMAudio", FakeAudioSource)
+    api = FakeApi("nuru")
+    voice_client = FakeVoiceClient(playing=True)
+    runtime = VoiceRuntime(
+        config=make_config(tts_voice="vtuber", ffmpeg_executable="ffmpeg-test"),
+        api=api,
+        companion=FakeCompanion(),
+    )
+
+    asyncio.run(runtime.speak(voice_client, "hello stream"))
+
+    assert api.tts_requests == [("hello stream", "vtuber")]
+    assert captured_audio == [(b"audio", True, "ffmpeg-test")]
+    assert voice_client.stopped
+    assert len(voice_client.played_sources) == 1
+
+
+def test_idle_commentary_runs_after_silence_when_one_user_is_alone():
+    user = type("Member", (), {"id": 321, "display_name": "Solo", "bot": False})()
+    companion = FakeCompanion()
+    runtime = CapturingVoiceRuntime(
+        config=make_config(idle_commentary_seconds=30),
+        api=FakeApi("nuru"),
+        companion=companion,
+    )
+    runtime.voice_client = FakeVoiceClient(members=[user])
+    runtime.last_voice_activity_at = 0.0
+    runtime.last_idle_commentary_at = 0.0
+
+    assert asyncio.run(runtime.maybe_run_idle_commentary())
+    assert companion.idle_requests == [("321", "42", "Solo")]
+    assert runtime.spoken == ["idle reply"]
+
+
+def test_idle_commentary_skips_when_multiple_humans_are_present():
+    users = [
+        type("Member", (), {"id": 1, "display_name": "One", "bot": False})(),
+        type("Member", (), {"id": 2, "display_name": "Two", "bot": False})(),
+    ]
+    companion = FakeCompanion()
+    runtime = CapturingVoiceRuntime(
+        config=make_config(idle_commentary_seconds=30),
+        api=FakeApi("nuru"),
+        companion=companion,
+    )
+    runtime.voice_client = FakeVoiceClient(members=users)
+    runtime.last_voice_activity_at = 0.0
+
+    assert not asyncio.run(runtime.maybe_run_idle_commentary())
+    assert companion.idle_requests == []
 
 
 def _loud_pcm():

@@ -185,33 +185,39 @@ class VoiceRuntime:
     async def _idle_commentary_loop(self, client: Client) -> None:
         while not client.is_closed():
             await asyncio.sleep(5)
-            voice_client = self.voice_client
-            if voice_client is None or not voice_client.is_connected():
-                continue
-            if voice_client.is_playing():
-                continue
+            await self.maybe_run_idle_commentary()
 
-            now = time.monotonic()
-            if now - self.last_voice_activity_at < self.config.idle_commentary_seconds:
-                continue
-            if now - self.last_idle_commentary_at < self.config.idle_commentary_seconds:
-                continue
+    async def maybe_run_idle_commentary(self) -> bool:
+        voice_client = self.voice_client
+        if voice_client is None or not voice_client.is_connected():
+            return False
+        if voice_client.is_playing():
+            return False
 
-            alone_user = _single_human_member(voice_client)
-            if alone_user is None:
-                continue
+        now = time.monotonic()
+        if now - self.last_voice_activity_at < self.config.idle_commentary_seconds:
+            return False
+        if now - self.last_idle_commentary_at < self.config.idle_commentary_seconds:
+            return False
 
-            self.last_idle_commentary_at = now
-            try:
-                text = await asyncio.to_thread(
-                    self.companion.idle_prompt,
-                    user_id=str(alone_user.id),
-                    channel_id=_voice_channel_id(voice_client),
-                    author_name=alone_user.display_name,
-                )
-                await self.speak(voice_client, text)
-            except NuruApiError:
-                LOGGER.exception("Failed to generate idle commentary")
+        alone_user = _single_human_member(voice_client)
+        if alone_user is None:
+            return False
+
+        self.last_idle_commentary_at = now
+        try:
+            text = await asyncio.to_thread(
+                self.companion.idle_prompt,
+                user_id=str(alone_user.id),
+                channel_id=_voice_channel_id(voice_client),
+                author_name=alone_user.display_name,
+            )
+            await self.speak(voice_client, text)
+        except NuruApiError:
+            LOGGER.exception("Failed to generate idle commentary")
+            return False
+
+        return True
 
 
 async def connect_voice_channel(
