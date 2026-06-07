@@ -50,6 +50,19 @@ def test_generate_reads_result_field():
     assert session.requests[0][1] == "http://nuru.local/model"
 
 
+def test_describe_image_encodes_image_bytes():
+    session = FakeSession()
+    session.next_response = FakeResponse({"result": "small image"})
+    api = NuruApi("http://nuru.local/", 3)
+    api.session = session
+
+    assert api.describe_image(b"image-bytes") == "small image"
+    method, url, kwargs = session.requests[0]
+    assert method == "POST"
+    assert url == "http://nuru.local/vision"
+    assert kwargs["json"] == {"input": "aW1hZ2UtYnl0ZXM="}
+
+
 def test_embed_accepts_openai_style_payload():
     session = FakeSession()
     session.next_response = FakeResponse({"data": [{"embedding": [1, "2.5"]}]})
@@ -69,6 +82,19 @@ def test_embed_rejects_missing_embedding():
         api.embed("memory")
 
 
+def test_transcribe_audio_encodes_audio_bytes():
+    session = FakeSession()
+    session.next_response = FakeResponse({"result": "hey nuru"})
+    api = NuruApi("http://nuru.local", 3)
+    api.session = session
+
+    assert api.transcribe_audio(b"audio-bytes") == "hey nuru"
+    method, url, kwargs = session.requests[0]
+    assert method == "POST"
+    assert url == "http://nuru.local/audio/transcribe"
+    assert kwargs["json"] == {"input": "YXVkaW8tYnl0ZXM="}
+
+
 def test_stream_tts_yields_non_empty_chunks():
     session = FakeSession()
     session.next_response = FakeResponse(chunks=[b"one", b"", b"two"])
@@ -77,6 +103,19 @@ def test_stream_tts_yields_non_empty_chunks():
 
     assert list(api.stream_tts("say this")) == [b"one", b"two"]
     assert session.requests[0][1] == "http://nuru.local/tts/stream"
+
+
+def test_stream_tts_sends_voice_when_configured():
+    session = FakeSession()
+    session.next_response = FakeResponse(chunks=[b"voice"])
+    api = NuruApi("http://nuru.local", 3)
+    api.session = session
+
+    assert list(api.stream_tts("say this", voice="vtuber")) == [b"voice"]
+    assert session.requests[0][2]["json"] == {
+        "input": "say this",
+        "voice": "vtuber",
+    }
 
 
 def test_close_closes_session():
