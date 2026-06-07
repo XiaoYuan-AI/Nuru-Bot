@@ -251,7 +251,6 @@ class VoiceRuntime:
         if alone_user is None:
             return False
 
-        self.last_idle_commentary_at = now
         try:
             text = await asyncio.to_thread(
                 self.companion.idle_prompt,
@@ -260,6 +259,7 @@ class VoiceRuntime:
                 author_name=alone_user.display_name,
             )
             await self.speak(voice_client, text)
+            self.last_idle_commentary_at = time.monotonic()
         except Exception:
             LOGGER.exception("Failed to run idle commentary")
             return False

@@ -317,6 +317,7 @@ def test_idle_commentary_runs_after_silence_when_one_user_is_alone():
     assert asyncio.run(runtime.maybe_run_idle_commentary())
     assert companion.idle_requests == [("321", "42", "Solo")]
     assert runtime.spoken == ["idle reply"]
+    assert runtime.last_idle_commentary_at > 0.0
 
 
 def test_idle_commentary_returns_false_when_delivery_crashes():
@@ -333,6 +334,7 @@ def test_idle_commentary_returns_false_when_delivery_crashes():
 
     assert not asyncio.run(runtime.maybe_run_idle_commentary())
     assert companion.idle_requests == [("321", "42", "Solo")]
+    assert runtime.last_idle_commentary_at == 0.0
 
 
 def test_idle_commentary_skips_when_multiple_humans_are_present():
