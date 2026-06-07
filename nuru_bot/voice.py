@@ -150,7 +150,7 @@ class VoiceRuntime:
                 InteractionRequest(
                     user_id=str(user_id),
                     channel_id=channel_id,
-                    author_name=str(user_id),
+                    author_name=_voice_author_name(voice_client, user_id),
                     content=transcript,
                     source="voice",
                 )
@@ -315,6 +315,28 @@ def _voice_channel_id(voice_client: VoiceClient) -> str:
     channel = getattr(voice_client, "channel", None)
     channel_id = getattr(channel, "id", "voice")
     return str(channel_id)
+
+
+def _voice_author_name(voice_client: VoiceClient, user_id: object) -> str:
+    channel = getattr(voice_client, "channel", None)
+    members = getattr(channel, "members", None)
+    if members is None:
+        return str(user_id)
+
+    expected_id = str(user_id)
+    for member in members:
+        if str(getattr(member, "id", "")) != expected_id:
+            continue
+
+        display_name = getattr(member, "display_name", None)
+        if display_name:
+            return str(display_name)
+
+        name = getattr(member, "name", None)
+        if name:
+            return str(name)
+
+    return str(user_id)
 
 
 def _single_human_member(voice_client: VoiceClient) -> object | None:

@@ -117,12 +117,32 @@ def test_recording_callback_responds_after_vad_and_hotword():
         companion=companion,
     )
     audio = _loud_pcm()
+    member = type("Member", (), {"id": 123, "display_name": "Voice User"})()
 
-    asyncio.run(runtime.recording_callback(FakeSink({123: audio}), FakeVoiceClient()))
+    asyncio.run(
+        runtime.recording_callback(
+            FakeSink({123: audio}),
+            FakeVoiceClient(members=[member]),
+        )
+    )
 
     assert companion.requests[0].content == "hey nuru say hello"
     assert companion.requests[0].channel_id == "42"
+    assert companion.requests[0].author_name == "Voice User"
     assert runtime.spoken == ["voice reply"]
+
+
+def test_recording_callback_uses_user_id_when_member_name_is_unavailable():
+    companion = FakeCompanion(response_mode="voice")
+    runtime = CapturingVoiceRuntime(
+        config=make_config(voice_vad_threshold=10),
+        api=FakeApi("hey nuru fallback name"),
+        companion=companion,
+    )
+
+    asyncio.run(runtime.recording_callback(FakeSink({123: _loud_pcm()}), FakeVoiceClient()))
+
+    assert companion.requests[0].author_name == "123"
 
 
 def test_recording_callback_sends_text_to_configured_channel():
