@@ -114,6 +114,11 @@ class FakeRecordingVoiceClient(FakeVoiceClient):
         self.stopped_count += 1
 
 
+class FailingStartRecordingVoiceClient(FakeRecordingVoiceClient):
+    def start_recording(self, sink, callback, *args):
+        raise RuntimeError("recording unavailable")
+
+
 class FakeSink:
     def __init__(self, audio_data):
         self.audio_data = audio_data
@@ -315,6 +320,19 @@ def test_start_recording_stops_segment_after_configured_delay():
     assert voice_client.started
     assert not voice_client.recording
     assert voice_client.stopped_count == 1
+
+
+def test_start_recording_returns_false_when_discord_start_fails():
+    runtime = CapturingVoiceRuntime(
+        config=make_config(recording_segment_seconds=10),
+        api=FakeApi("nuru"),
+        companion=FakeCompanion(),
+    )
+    voice_client = FailingStartRecordingVoiceClient()
+
+    assert not runtime.start_recording(voice_client)
+    assert not voice_client.recording
+    assert runtime._recording_stop_task is None
 
 
 def test_close_cancels_pending_recording_stop_task():

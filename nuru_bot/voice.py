@@ -136,12 +136,22 @@ class VoiceRuntime:
 
         return voice_client
 
-    def start_recording(self, voice_client: VoiceClient) -> None:
+    def start_recording(self, voice_client: VoiceClient) -> bool:
         if getattr(voice_client, "recording", False):
-            return
+            return False
 
-        voice_client.start_recording(sinks.WaveSink(), self.recording_callback, voice_client)
+        try:
+            voice_client.start_recording(
+                sinks.WaveSink(),
+                self.recording_callback,
+                voice_client,
+            )
+        except Exception:
+            LOGGER.exception("Failed to start voice recording")
+            return False
+
         self._schedule_recording_stop(voice_client)
+        return True
 
     async def recording_callback(
         self,
