@@ -7,7 +7,10 @@ def test_hotword_detector_matches_configured_words():
     detector = HotwordDetector(["nuru", "hey bot"])
 
     assert detector.matches("hey Nuru, wake up")
+    assert detector.matches("please HEY   BOT now")
     assert not detector.matches("just talking")
+    assert not detector.matches("manuru is not a wake word")
+    assert not detector.matches("hey botany facts")
 
 
 def test_voice_activity_detector_uses_rms_threshold():

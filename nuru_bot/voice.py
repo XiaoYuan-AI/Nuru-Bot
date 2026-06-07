@@ -4,6 +4,7 @@ import asyncio
 import io
 import logging
 import math
+import re
 import time
 import wave
 from collections.abc import Iterable, Iterator
@@ -42,11 +43,29 @@ class VoiceActivityDetector:
 
 class HotwordDetector:
     def __init__(self, hotwords: Iterable[str]) -> None:
-        self.hotwords = tuple(word.lower() for word in hotwords if word.strip())
+        self.hotwords = tuple(
+            _normalize_hotword(word)
+            for word in hotwords
+            if word.strip()
+        )
+        self._patterns = tuple(
+            _compile_hotword_pattern(hotword)
+            for hotword in self.hotwords
+        )
 
     def matches(self, transcript: str) -> bool:
-        lowered = transcript.lower()
-        return any(hotword in lowered for hotword in self.hotwords)
+        return any(pattern.search(transcript) is not None for pattern in self._patterns)
+
+
+def _normalize_hotword(hotword: str) -> str:
+    return " ".join(hotword.lower().split())
+
+
+def _compile_hotword_pattern(hotword: str) -> re.Pattern[str]:
+    pattern = r"\s+".join(re.escape(part) for part in hotword.split())
+    prefix = r"(?<!\w)" if hotword[0].isalnum() or hotword[0] == "_" else ""
+    suffix = r"(?!\w)" if hotword[-1].isalnum() or hotword[-1] == "_" else ""
+    return re.compile(f"{prefix}{pattern}{suffix}", re.IGNORECASE)
 
 
 class IteratorAudioStream(io.RawIOBase):
