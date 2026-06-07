@@ -1,0 +1,22 @@
+[project]
+name = "nuru-bot"
+version = "0.1.0"
+description = "Discord bot client for a local Nuru model service"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "audioop-lts>=0.2.2",
+    "openai-whisper>=20250625",
+    "py-cord>=2.6.1",
+    "pynacl>=1.6.1",
+    "python-dotenv>=1.2.1",
+    "realtimestt>=0.3.104",
+    "requests>=2.32.5",
+]
+
+[project.scripts]
+nuru-bot = "nuru_bot.bot:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
