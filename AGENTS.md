@@ -27,6 +27,7 @@ uv sync
 uv run python -m nuru_bot
 uv run python bot.py
 uv run nuru-bot-doctor
+uv run nuru-bot-doctor --voice-sample .\samples\hey-nuru.wav
 uv run pytest
 uv run python -m compileall bot.py main.py nuru_bot
 uv lock --check

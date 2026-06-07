@@ -7,12 +7,14 @@ import subprocess
 import wave
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 
 from .api import NuruApi, NuruApiError
 from .companion import CompanionService, InteractionRequest
 from .config import BotConfig, load_config
 from .memory import MemoryStore
 from .state import StateStore
+from .voice import HotwordDetector, VoiceActivityDetector
 
 
 @dataclass(frozen=True)
@@ -44,6 +46,7 @@ def run_diagnostics(
     api: NuruApi | None = None,
     include_api: bool = True,
     include_ffmpeg: bool = True,
+    voice_sample_path: str | Path | None = None,
     ffmpeg_checker: Callable[[str], DiagnosticResult] | None = None,
 ) -> DiagnosticReport:
     results = [
@@ -56,13 +59,25 @@ def run_diagnostics(
         checker = ffmpeg_checker or check_ffmpeg
         results.append(checker(config.ffmpeg_executable))
 
-    if include_api:
+    api_client: NuruApi | None = None
+    own_api_client = False
+    if include_api or voice_sample_path is not None:
         api_client = api or NuruApi(
             config.api_base_url,
             config.request_timeout_seconds,
         )
-        results.extend(check_api_contract(api_client))
-        results.append(check_companion_pipeline(api_client, config))
+        own_api_client = api is None
+
+    try:
+        if include_api and api_client is not None:
+            results.extend(check_api_contract(api_client))
+            results.append(check_companion_pipeline(api_client, config))
+
+        if voice_sample_path is not None and api_client is not None:
+            results.append(check_voice_sample(api_client, config, voice_sample_path))
+    finally:
+        if own_api_client and api_client is not None:
+            api_client.close()
 
     return DiagnosticReport(results)
 
@@ -166,19 +181,95 @@ def check_companion_pipeline(api: NuruApi, config: BotConfig) -> DiagnosticResul
     )
 
 
+def check_voice_sample(
+    api: NuruApi,
+    config: BotConfig,
+    voice_sample_path: str | Path,
+) -> DiagnosticResult:
+    path = Path(voice_sample_path)
+    try:
+        audio_data = path.read_bytes()
+    except OSError as exc:
+        return DiagnosticResult("voice sample", False, f"could not read {path}: {exc}")
+
+    vad = VoiceActivityDetector(config.voice_vad_threshold)
+    if not vad.detects_speech(audio_data):
+        return DiagnosticResult(
+            "voice sample",
+            False,
+            f"VAD did not detect speech above RMS threshold {config.voice_vad_threshold}",
+        )
+
+    memory = MemoryStore(":memory:")
+    state = StateStore(":memory:")
+    companion = CompanionService(
+        api=api,
+        memory=memory,
+        state=state,
+        config=config,
+    )
+
+    try:
+        transcript = api.transcribe_audio(audio_data)
+        if not HotwordDetector(config.wake_words).matches(transcript):
+            return DiagnosticResult(
+                "voice sample",
+                False,
+                f"transcript did not include wake word: {transcript!r}",
+            )
+
+        response = asyncio.run(
+            companion.respond(
+                InteractionRequest(
+                    user_id="diagnostic-voice-user",
+                    channel_id="diagnostic-voice-channel",
+                    author_name="Diagnostic Voice",
+                    content=transcript,
+                    source="voice-sample",
+                )
+            )
+        )
+        if not response.text.strip():
+            return DiagnosticResult("voice sample", False, "companion response was empty")
+
+        if not _has_tts_chunk_for_text(api, response.text):
+            return DiagnosticResult("voice sample", False, "TTS stream returned no audio")
+    except NuruApiError as exc:
+        return DiagnosticResult("voice sample", False, str(exc))
+    except Exception as exc:  # pragma: no cover - defensive diagnostics boundary
+        return DiagnosticResult("voice sample", False, f"unexpected error: {exc}")
+    finally:
+        memory.close()
+        state.close()
+
+    return DiagnosticResult(
+        "voice sample",
+        True,
+        f"wake word accepted transcript: {transcript!r}",
+    )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Check Nuru Bot runtime configuration and local service contracts.",
     )
     parser.add_argument("--skip-api", action="store_true", help="Do not call Nuru API endpoints.")
     parser.add_argument("--skip-ffmpeg", action="store_true", help="Do not check FFmpeg.")
+    parser.add_argument(
+        "--voice-sample",
+        type=Path,
+        help="Audio file containing a wake-word phrase to test VAD, transcription, response, and TTS.",
+    )
     args = parser.parse_args()
+    if args.skip_api and args.voice_sample is not None:
+        parser.error("--voice-sample requires API checks; remove --skip-api")
 
     config = load_config(require_token=False)
     report = run_diagnostics(
         config,
         include_api=not args.skip_api,
         include_ffmpeg=not args.skip_ffmpeg,
+        voice_sample_path=args.voice_sample,
     )
     print(report.format_text())
     raise SystemExit(0 if report.ok else 1)
@@ -247,7 +338,11 @@ def _current_event_loop() -> asyncio.AbstractEventLoop | None:
 
 
 def _has_tts_chunk(api: NuruApi) -> bool:
-    for chunk in api.stream_tts("diagnostic tts"):
+    return _has_tts_chunk_for_text(api, "diagnostic tts")
+
+
+def _has_tts_chunk_for_text(api: NuruApi, text: str) -> bool:
+    for chunk in api.stream_tts(text):
         if chunk:
             return True
     return False

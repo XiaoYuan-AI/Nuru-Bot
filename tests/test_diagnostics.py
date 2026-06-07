@@ -1,9 +1,12 @@
+import struct
+import wave
 from pathlib import Path
 
 from nuru_bot.config import BotConfig, load_config
 from nuru_bot.diagnostics import (
     DiagnosticResult,
     check_api_contract,
+    check_voice_sample,
     run_diagnostics,
 )
 
@@ -26,6 +29,19 @@ class EmptyTtsApi(HealthyApi):
     def stream_tts(self, text):
         if False:
             yield b""
+
+
+class VoiceSampleApi(HealthyApi):
+    def __init__(self, transcript="hey nuru diagnostic"):
+        self.transcript = transcript
+        self.generated_prompts = []
+
+    def generate(self, prompt):
+        self.generated_prompts.append(prompt)
+        return "voice response"
+
+    def transcribe_audio(self, audio_data):
+        return self.transcript
 
 
 def test_run_diagnostics_reports_token_storage_ffmpeg_and_api(tmp_path):
@@ -73,6 +89,58 @@ def test_check_api_contract_fails_empty_tts_stream():
     assert tts_result.detail == "contract returned an empty response"
 
 
+def test_check_voice_sample_accepts_hotword_audio(tmp_path):
+    sample_path = _write_wave(tmp_path / "voice.wav", sample_value=2000)
+    api = VoiceSampleApi("hey Nuru please respond")
+
+    result = check_voice_sample(api, _config(tmp_path / "state.sqlite3", "token"), sample_path)
+
+    assert result.ok
+    assert "wake word accepted" in result.detail
+    assert api.generated_prompts
+
+
+def test_check_voice_sample_rejects_quiet_audio(tmp_path):
+    sample_path = _write_wave(tmp_path / "quiet.wav", sample_value=1)
+
+    result = check_voice_sample(
+        VoiceSampleApi("hey nuru"),
+        _config(tmp_path / "state.sqlite3", "token"),
+        sample_path,
+    )
+
+    assert not result.ok
+    assert "VAD did not detect speech" in result.detail
+
+
+def test_check_voice_sample_requires_wake_word(tmp_path):
+    sample_path = _write_wave(tmp_path / "voice.wav", sample_value=2000)
+
+    result = check_voice_sample(
+        VoiceSampleApi("no hotword here"),
+        _config(tmp_path / "state.sqlite3", "token"),
+        sample_path,
+    )
+
+    assert not result.ok
+    assert "did not include wake word" in result.detail
+
+
+def test_run_diagnostics_can_include_voice_sample(tmp_path):
+    sample_path = _write_wave(tmp_path / "voice.wav", sample_value=2000)
+    config = _config(tmp_path / "state.sqlite3", token="token")
+
+    report = run_diagnostics(
+        config,
+        api=VoiceSampleApi("hey nuru diagnostic"),
+        include_ffmpeg=False,
+        voice_sample_path=sample_path,
+    )
+
+    assert report.ok
+    assert report.results[-1].name == "voice sample"
+
+
 def test_run_diagnostics_reports_registered_slash_commands(tmp_path):
     config = _config(tmp_path / "state.sqlite3", token="token")
 
@@ -118,3 +186,13 @@ def _config(database_path: Path, token: str) -> BotConfig:
         tts_voice=None,
         ffmpeg_executable="ffmpeg",
     )
+
+
+def _write_wave(path: Path, sample_value: int) -> Path:
+    frames = b"".join(struct.pack("<h", sample_value) for _ in range(1600))
+    with wave.open(str(path), "wb") as wave_file:
+        wave_file.setnchannels(1)
+        wave_file.setsampwidth(2)
+        wave_file.setframerate(16000)
+        wave_file.writeframes(frames)
+    return path

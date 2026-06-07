@@ -76,9 +76,12 @@ Use the doctor command before live Discord testing:
 ```powershell
 uv run nuru-bot-doctor
 uv run nuru-bot-doctor --skip-api
+uv run nuru-bot-doctor --voice-sample .\samples\hey-nuru.wav
 ```
 
 The doctor checks token configuration, SQLite storage, Discord bot construction,
 slash command registration, FFmpeg, local Nuru API contracts for model
 generation, embeddings, transcription, TTS streaming, and the companion
-prompt/memory/state pipeline.
+prompt/memory/state pipeline. With `--voice-sample`, it also validates VAD,
+transcription, wake-word detection, response generation, and TTS against a real
+audio file.
