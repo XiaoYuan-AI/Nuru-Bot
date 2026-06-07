@@ -76,3 +76,10 @@ def test_mood_adjusts_from_sentiment_words(tmp_path):
 
     assert store.adjust_mood_from_text("thanks, that was great").label == "curious"
     assert store.adjust_mood_from_text("I love this good thing").energy > 0.5
+
+
+def test_mood_ignores_sentiment_substrings_inside_other_words(tmp_path):
+    store = StateStore(tmp_path / "state.sqlite3")
+
+    assert store.adjust_mood_from_text("goodbye badminton").energy == 0.5
+    assert store.adjust_mood_from_text("thank-you, nice work").energy == 0.6

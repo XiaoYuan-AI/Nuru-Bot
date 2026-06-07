@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 import threading
 from dataclasses import dataclass
@@ -10,6 +11,9 @@ from typing import Literal
 
 
 ResponseMode = Literal["text", "voice", "both"]
+POSITIVE_MOOD_WORDS = {"thanks", "thank", "love", "great", "nice", "good", "happy"}
+NEGATIVE_MOOD_WORDS = {"bad", "hate", "angry", "sad", "annoying", "stupid"}
+WORD_PATTERN = re.compile(r"[a-z0-9_']+")
 
 DEFAULT_PERSONA_PROMPTS = {
     "nuru": "Playful, curious, lightly teasing, and emotionally responsive.",
@@ -60,14 +64,12 @@ class StateStore:
 
     def adjust_mood_from_text(self, text: str) -> MoodState:
         current = self.get_mood()
-        lowered = text.lower()
-        positive = {"thanks", "thank", "love", "great", "nice", "good", "happy"}
-        negative = {"bad", "hate", "angry", "sad", "annoying", "stupid"}
+        words = set(_word_tokens(text))
 
         delta = 0.0
-        if any(word in lowered for word in positive):
+        if words & POSITIVE_MOOD_WORDS:
             delta += 0.1
-        if any(word in lowered for word in negative):
+        if words & NEGATIVE_MOOD_WORDS:
             delta -= 0.1
 
         energy = max(0.0, min(1.0, current.energy + delta))
@@ -246,3 +248,7 @@ class StateStore:
 
 def _now() -> str:
     return datetime.now(UTC).isoformat()
+
+
+def _word_tokens(text: str) -> list[str]:
+    return WORD_PATTERN.findall(text.lower())
