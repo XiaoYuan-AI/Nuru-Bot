@@ -25,6 +25,7 @@ CONFIG_ENV_NAMES = [
     "NURU_ENABLE_IDLE_COMMENTARY",
     "NURU_IDLE_COMMENTARY_SECONDS",
     "NURU_VAD_RMS_THRESHOLD",
+    "NURU_RECORDING_SEGMENT_SECONDS",
     "NURU_WAKE_WORDS",
     "NURU_DEFAULT_RESPONSE_MODE",
     "NURU_MEMORY_CONTEXT_LIMIT",
@@ -49,6 +50,7 @@ def test_load_config_uses_environment_values(monkeypatch):
     monkeypatch.setenv("NURU_ENABLE_TEXT_CHAT", "true")
     monkeypatch.setenv("NURU_ENABLE_IDLE_COMMENTARY", "false")
     monkeypatch.setenv("NURU_WAKE_WORDS", "Nuru,Hey Nuru")
+    monkeypatch.setenv("NURU_RECORDING_SEGMENT_SECONDS", "2.5")
     monkeypatch.setenv("NURU_DEFAULT_RESPONSE_MODE", "both")
     monkeypatch.setenv("NURU_MEMORY_CONTEXT_LIMIT", "9")
     monkeypatch.setenv("NURU_TTS_VOICE", "vtuber")
@@ -63,6 +65,7 @@ def test_load_config_uses_environment_values(monkeypatch):
     assert config.enable_text_chat
     assert not config.enable_idle_commentary
     assert config.wake_words == ("nuru", "hey nuru")
+    assert config.recording_segment_seconds == 2.5
     assert config.default_response_mode == "both"
     assert config.memory_context_limit == 9
     assert config.tts_voice == "vtuber"
@@ -86,6 +89,14 @@ def test_load_config_requires_token():
 def test_load_config_rejects_invalid_response_mode(monkeypatch):
     monkeypatch.setenv("DISCORD_TOKEN", "discord-token")
     monkeypatch.setenv("NURU_DEFAULT_RESPONSE_MODE", "video")
+
+    with pytest.raises(ValueError):
+        load_config()
+
+
+def test_load_config_rejects_non_positive_recording_segment(monkeypatch):
+    monkeypatch.setenv("DISCORD_TOKEN", "discord-token")
+    monkeypatch.setenv("NURU_RECORDING_SEGMENT_SECONDS", "0")
 
     with pytest.raises(ValueError):
         load_config()

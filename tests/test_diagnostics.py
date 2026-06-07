@@ -248,6 +248,7 @@ def _config(database_path: Path, token: str) -> BotConfig:
         enable_idle_commentary=False,
         idle_commentary_seconds=30.0,
         voice_vad_threshold=500.0,
+        recording_segment_seconds=5.0,
         wake_words=("nuru",),
         default_response_mode="text",
         memory_context_limit=6,

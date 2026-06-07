@@ -71,6 +71,24 @@ class FakeVoiceClient:
         self.played_sources.append(source)
 
 
+class FakeRecordingVoiceClient(FakeVoiceClient):
+    def __init__(self):
+        super().__init__()
+        self.recording = False
+        self.started = False
+        self.stopped_count = 0
+
+    def start_recording(self, sink, callback, *args):
+        self.recording = True
+        self.started = True
+        self.recording_callback = callback
+        self.recording_args = args
+
+    def stop_recording(self):
+        self.recording = False
+        self.stopped_count += 1
+
+
 class FakeSink:
     def __init__(self, audio_data):
         self.audio_data = audio_data
@@ -134,6 +152,44 @@ def test_recording_callback_sends_text_to_configured_channel():
 
     assert sent_messages == ["voice reply"]
     assert runtime.spoken == []
+
+
+def test_start_recording_stops_segment_after_configured_delay():
+    runtime = CapturingVoiceRuntime(
+        config=make_config(recording_segment_seconds=0.01),
+        api=FakeApi("nuru"),
+        companion=FakeCompanion(),
+    )
+    voice_client = FakeRecordingVoiceClient()
+
+    async def run_segment():
+        runtime.start_recording(voice_client)
+        await asyncio.sleep(0.05)
+
+    asyncio.run(run_segment())
+
+    assert voice_client.started
+    assert not voice_client.recording
+    assert voice_client.stopped_count == 1
+
+
+def test_close_cancels_pending_recording_stop_task():
+    runtime = CapturingVoiceRuntime(
+        config=make_config(recording_segment_seconds=10),
+        api=FakeApi("nuru"),
+        companion=FakeCompanion(),
+    )
+    voice_client = FakeRecordingVoiceClient()
+
+    async def run_close():
+        runtime.start_recording(voice_client)
+        runtime.close()
+        await asyncio.sleep(0)
+
+    asyncio.run(run_close())
+
+    assert voice_client.recording
+    assert runtime._recording_stop_task.cancelled()
 
 
 def test_speak_streams_tts_chunks_into_ffmpeg_source(monkeypatch):

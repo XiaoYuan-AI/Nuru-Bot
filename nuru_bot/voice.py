@@ -99,6 +99,7 @@ class VoiceRuntime:
         self.voice_client: VoiceClient | None = None
         self.client: Client | None = None
         self._idle_task: asyncio.Task[None] | None = None
+        self._recording_stop_task: asyncio.Task[None] | None = None
 
     async def connect(self, client: Client) -> VoiceClient | None:
         self.client = client
@@ -117,7 +118,11 @@ class VoiceRuntime:
         return voice_client
 
     def start_recording(self, voice_client: VoiceClient) -> None:
+        if getattr(voice_client, "recording", False):
+            return
+
         voice_client.start_recording(sinks.WaveSink(), self.recording_callback, voice_client)
+        self._schedule_recording_stop(voice_client)
 
     async def recording_callback(
         self,
@@ -174,11 +179,32 @@ class VoiceRuntime:
     def close(self) -> None:
         if self._idle_task is not None and not self._idle_task.done():
             self._idle_task.cancel()
+        if self._recording_stop_task is not None and not self._recording_stop_task.done():
+            self._recording_stop_task.cancel()
 
     async def _idle_commentary_loop(self, client: Client) -> None:
         while not client.is_closed():
             await asyncio.sleep(5)
             await self.maybe_run_idle_commentary()
+
+    def _schedule_recording_stop(self, voice_client: VoiceClient) -> None:
+        if self._recording_stop_task is not None and not self._recording_stop_task.done():
+            self._recording_stop_task.cancel()
+        self._recording_stop_task = asyncio.create_task(
+            self._stop_recording_after_segment(voice_client)
+        )
+
+    async def _stop_recording_after_segment(self, voice_client: VoiceClient) -> None:
+        await asyncio.sleep(self.config.recording_segment_seconds)
+        if not voice_client.is_connected():
+            return
+        if not getattr(voice_client, "recording", False):
+            return
+
+        try:
+            voice_client.stop_recording()
+        except Exception:
+            LOGGER.exception("Failed to stop segmented voice recording")
 
     async def maybe_run_idle_commentary(self) -> bool:
         voice_client = self.voice_client

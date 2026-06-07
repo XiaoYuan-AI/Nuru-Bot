@@ -38,6 +38,7 @@ class BotConfig:
     enable_idle_commentary: bool
     idle_commentary_seconds: float
     voice_vad_threshold: float
+    recording_segment_seconds: float
     wake_words: tuple[str, ...]
     default_response_mode: ResponseModeName
     memory_context_limit: int
@@ -76,6 +77,10 @@ def load_config(*, require_token: bool = True) -> BotConfig:
         enable_idle_commentary=_bool_env("NURU_ENABLE_IDLE_COMMENTARY", True),
         idle_commentary_seconds=_float_env("NURU_IDLE_COMMENTARY_SECONDS", 30.0),
         voice_vad_threshold=_float_env("NURU_VAD_RMS_THRESHOLD", 500.0),
+        recording_segment_seconds=_positive_float_env(
+            "NURU_RECORDING_SEGMENT_SECONDS",
+            5.0,
+        ),
         wake_words=_tuple_env("NURU_WAKE_WORDS", ("nuru", "hey nuru")),
         default_response_mode=_response_mode_env("NURU_DEFAULT_RESPONSE_MODE", "text"),
         memory_context_limit=_int_env("NURU_MEMORY_CONTEXT_LIMIT", 6),
@@ -125,6 +130,13 @@ def _float_env(name: str, default: float) -> float:
         return float(value)
     except ValueError as exc:
         raise ValueError(f"{name} must be a number") from exc
+
+
+def _positive_float_env(name: str, default: float) -> float:
+    value = _float_env(name, default)
+    if value <= 0:
+        raise ValueError(f"{name} must be greater than 0")
+    return value
 
 
 def _int_env(name: str, default: int) -> int:
