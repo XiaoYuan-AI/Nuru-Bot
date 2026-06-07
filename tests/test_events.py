@@ -76,6 +76,41 @@ def test_handle_dm_reaction_honors_voice_response_mode(monkeypatch):
     ]
 
 
+def test_message_prompt_parts_ignores_empty_content_after_bot_mention():
+    mention = FakeMention(bot=True, mention="<@999>")
+    message = FakeTextMessage(content="<@999>   ", mentions=[mention])
+    companion = FakeCompanion(_response("text"))
+
+    prompt_parts = asyncio.run(events._message_prompt_parts(message, companion))
+
+    assert prompt_parts == []
+
+
+def test_message_prompt_parts_keeps_content_after_bot_mention():
+    mention = FakeMention(bot=True, mention="<@999>")
+    message = FakeTextMessage(content="<@999> hello there", mentions=[mention])
+    companion = FakeCompanion(_response("text"))
+
+    prompt_parts = asyncio.run(events._message_prompt_parts(message, companion))
+
+    assert prompt_parts == ["hello there"]
+
+
+def test_message_prompt_parts_skips_failed_image_and_empty_mention():
+    mention = FakeMention(bot=True, mention="<@999>")
+    attachment = FakeAttachment("image.png")
+    message = FakeTextMessage(
+        content="<@999>",
+        attachments=[attachment],
+        mentions=[mention],
+    )
+    companion = FakeCompanion(_response("text"), describe_error=events.NuruApiError("bad"))
+
+    prompt_parts = asyncio.run(events._message_prompt_parts(message, companion))
+
+    assert prompt_parts == []
+
+
 def _response(response_mode):
     return InteractionResponse(
         text="hello",
@@ -128,13 +163,24 @@ class FailingVoiceRuntime(FakeVoiceRuntime):
 
 
 class FakeCompanion:
-    def __init__(self, response):
+    def __init__(self, response, describe_error=None):
         self.response = response
+        self.api = FakeApi(describe_error)
         self.requests = []
 
     async def respond(self, request):
         self.requests.append(request)
         return self.response
+
+
+class FakeApi:
+    def __init__(self, describe_error=None):
+        self.describe_error = describe_error
+
+    def describe_image(self, image_data):
+        if self.describe_error is not None:
+            raise self.describe_error
+        return f"{len(image_data)} bytes"
 
 
 class FakeClient:
@@ -150,6 +196,27 @@ class FakeUser:
 class FakeMessage:
     def __init__(self, channel):
         self.channel = channel
+
+
+class FakeTextMessage:
+    def __init__(self, content, attachments=None, mentions=None):
+        self.content = content
+        self.attachments = attachments or []
+        self.mentions = mentions or []
+
+
+class FakeAttachment:
+    def __init__(self, filename):
+        self.filename = filename
+
+    async def read(self):
+        return b"image"
+
+
+class FakeMention:
+    def __init__(self, *, bot, mention):
+        self.bot = bot
+        self.mention = mention
 
 
 class FakeReaction:

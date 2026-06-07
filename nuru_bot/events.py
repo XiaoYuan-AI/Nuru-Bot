@@ -189,7 +189,9 @@ async def _message_prompt_parts(
         prompt_parts.append(f"(Image description: {description})")
 
     if message.content:
-        prompt_parts.append(_strip_bot_mention(message))
+        content = _strip_bot_mention(message)
+        if content:
+            prompt_parts.append(content)
 
     return prompt_parts
 
