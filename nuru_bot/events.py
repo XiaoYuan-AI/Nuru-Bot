@@ -63,9 +63,9 @@ async def handle_text_message(
     try:
         response = await companion.respond(
             InteractionRequest(
-                user_id=str(message.author.id),
-                channel_id=str(message.channel.id),
-                author_name=message.author.display_name,
+                user_id=_object_id(message.author, "unknown"),
+                channel_id=_object_id(message.channel, "unknown"),
+                author_name=_display_name(message.author),
                 content="\n".join(prompt_parts),
                 source="text",
             )
@@ -107,10 +107,10 @@ async def handle_dm_reaction(
     try:
         response = await companion.respond(
             InteractionRequest(
-                user_id=str(user.id),
-                channel_id=str(reaction.message.channel.id),
-                author_name=user.display_name,
-                content=f"{user.name}'s reaction is: {reaction.emoji}",
+                user_id=_object_id(user, "unknown"),
+                channel_id=_object_id(reaction.message.channel, "unknown"),
+                author_name=_display_name(user),
+                content=f"{_user_name(user)}'s reaction is: {reaction.emoji}",
                 source="reaction",
             )
         )
@@ -237,3 +237,23 @@ def _strip_bot_mention(message: Message) -> str:
         if getattr(mention, "bot", False):
             content = content.replace(mention.mention, "").strip()
     return content
+
+
+def _display_name(user: object) -> str:
+    display_name = getattr(user, "display_name", None)
+    if display_name:
+        return str(display_name)
+
+    return _user_name(user)
+
+
+def _user_name(user: object) -> str:
+    name = getattr(user, "name", None)
+    if name:
+        return str(name)
+
+    return _object_id(user, "unknown")
+
+
+def _object_id(value: object, fallback: str) -> str:
+    return str(getattr(value, "id", fallback))

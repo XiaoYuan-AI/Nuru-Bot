@@ -76,6 +76,50 @@ def test_handle_dm_reaction_honors_voice_response_mode(monkeypatch):
     ]
 
 
+def test_handle_text_message_uses_author_name_fallback(monkeypatch):
+    monkeypatch.setattr(events, "DMChannel", FakeDmChannel)
+    channel = FakeDmChannel()
+    author = FakeNamedUser()
+    message = FakeTextEventMessage(channel=channel, content="hello", author=author)
+    companion = FakeCompanion(_response("text"))
+    voice_runtime = FakeVoiceRuntime(connected=False)
+
+    asyncio.run(
+        events.handle_text_message(
+            FakeClient(),
+            message,
+            companion,
+            voice_runtime,
+        )
+    )
+
+    assert channel.sent == ["hello"]
+    assert companion.requests[0].author_name == "NameOnly"
+    assert companion.requests[0].user_id == "789"
+
+
+def test_handle_dm_reaction_uses_user_name_fallback(monkeypatch):
+    monkeypatch.setattr(events, "DMChannel", FakeDmChannel)
+    channel = FakeDmChannel()
+    user = FakeNamedUser()
+    companion = FakeCompanion(_response("text"))
+    voice_runtime = FakeVoiceRuntime(connected=False)
+
+    asyncio.run(
+        events.handle_dm_reaction(
+            FakeClient(),
+            FakeReaction(FakeMessage(channel)),
+            user,
+            companion,
+            voice_runtime,
+        )
+    )
+
+    assert channel.sent == ["hello"]
+    assert companion.requests[0].author_name == "NameOnly"
+    assert companion.requests[0].content == "NameOnly's reaction is: :sparkles:"
+
+
 def test_handle_text_message_sends_fallback_when_companion_crashes(monkeypatch):
     monkeypatch.setattr(events, "DMChannel", FakeDmChannel)
     channel = FakeDmChannel()
@@ -260,14 +304,19 @@ class FakeUser:
     display_name = "Tester"
 
 
+class FakeNamedUser:
+    id = 789
+    name = "NameOnly"
+
+
 class FakeMessage:
     def __init__(self, channel):
         self.channel = channel
 
 
 class FakeTextEventMessage:
-    def __init__(self, *, channel, content):
-        self.author = FakeUser()
+    def __init__(self, *, channel, content, author=None):
+        self.author = author or FakeUser()
         self.channel = channel
         self.content = content
         self.attachments = []
