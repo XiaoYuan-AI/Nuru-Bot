@@ -103,7 +103,15 @@ class CompanionService:
             persona,
             memories,
         )
-        return self.api.generate(prompt)
+        response_text = self.api.generate(prompt)
+        self.memory.add_entry(
+            user_id=user_id,
+            channel_id=channel_id,
+            role="assistant",
+            content=response_text,
+            embedding=self.embed_text(response_text),
+        )
+        return response_text
 
     def embed_text(self, text: str) -> list[float]:
         try:

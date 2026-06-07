@@ -100,4 +100,8 @@ def test_idle_prompt_uses_recent_scoped_memories():
         channel_id="voice-1",
         author_name="Tester",
     ) == "remembered response"
+
+    entries = memory.recent(user_id="user-1", channel_id="voice-1")
     assert "quiet commentary" in api.prompts[0]
+    assert [entry.role for entry in entries] == ["user", "assistant"]
+    assert entries[1].content == "remembered response"
