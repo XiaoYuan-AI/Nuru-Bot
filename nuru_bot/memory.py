@@ -107,6 +107,9 @@ class MemoryStore:
                 continue
             scored_entries.append((_cosine_similarity(query, entry.embedding), entry))
 
+        if not scored_entries:
+            return self.recent(user_id=user_id, channel_id=channel_id, limit=limit)
+
         scored_entries.sort(key=lambda item: item[0], reverse=True)
         return [entry for _, entry in scored_entries[:limit]]
 
