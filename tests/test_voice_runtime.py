@@ -15,6 +15,8 @@ class FakeApi:
         self.tts_requests = []
 
     def transcribe_audio(self, audio_data):
+        if isinstance(self.transcript, Exception):
+            raise self.transcript
         return self.transcript
 
     def stream_tts(self, text, *, voice=None):
@@ -212,6 +214,30 @@ def test_recording_callback_restarts_recording_when_companion_fails():
     asyncio.run(run_callback())
 
     assert companion.requests[0].content == "hey nuru fail safely"
+    assert voice_client.started
+    assert voice_client.recording
+    assert runtime.spoken == []
+
+
+def test_recording_callback_restarts_recording_when_transcription_crashes():
+    runtime = CapturingVoiceRuntime(
+        config=make_config(
+            record_voice_audio=True,
+            recording_segment_seconds=10,
+            voice_vad_threshold=10,
+        ),
+        api=FakeApi(RuntimeError("decoder crashed")),
+        companion=FakeCompanion(),
+    )
+    voice_client = FakeRecordingVoiceClient()
+
+    async def run_callback():
+        await runtime.recording_callback(FakeSink({123: _loud_pcm()}), voice_client)
+        runtime.close()
+        await asyncio.sleep(0)
+
+    asyncio.run(run_callback())
+
     assert voice_client.started
     assert voice_client.recording
     assert runtime.spoken == []

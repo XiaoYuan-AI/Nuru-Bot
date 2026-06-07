@@ -159,6 +159,9 @@ class VoiceRuntime:
             except NuruApiError:
                 LOGGER.exception("Failed to transcribe voice audio")
                 continue
+            except Exception:
+                LOGGER.exception("Unexpected voice transcription failure")
+                continue
 
             if not self.hotwords.matches(transcript):
                 LOGGER.info("Ignoring voice transcript without wake word: %s", transcript)
