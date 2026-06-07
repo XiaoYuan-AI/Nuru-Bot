@@ -58,6 +58,9 @@ class NuruApi:
         except RequestException as exc:
             raise NuruApiError(f"Request to {url} failed") from exc
 
+    def close(self) -> None:
+        self.session.close()
+
     def _request_result(self, method: str, path: str, **kwargs: object) -> str:
         payload = self._request_json(method, path, **kwargs)
 

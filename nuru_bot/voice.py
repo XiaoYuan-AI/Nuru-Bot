@@ -182,6 +182,10 @@ class VoiceRuntime:
             return
         self._idle_task = client.loop.create_task(self._idle_commentary_loop(client))
 
+    def close(self) -> None:
+        if self._idle_task is not None and not self._idle_task.done():
+            self._idle_task.cancel()
+
     async def _idle_commentary_loop(self, client: Client) -> None:
         while not client.is_closed():
             await asyncio.sleep(5)

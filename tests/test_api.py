@@ -77,3 +77,21 @@ def test_stream_tts_yields_non_empty_chunks():
 
     assert list(api.stream_tts("say this")) == [b"one", b"two"]
     assert session.requests[0][1] == "http://nuru.local/tts/stream"
+
+
+def test_close_closes_session():
+    class CloseTrackingSession(FakeSession):
+        def __init__(self):
+            super().__init__()
+            self.closed = False
+
+        def close(self):
+            self.closed = True
+
+    session = CloseTrackingSession()
+    api = NuruApi("http://nuru.local", 3)
+    api.session = session
+
+    api.close()
+
+    assert session.closed

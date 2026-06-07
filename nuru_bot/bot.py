@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 
 from discord import Bot, Intents
 
@@ -15,6 +16,21 @@ from .voice import VoiceRuntime
 
 
 LOGGER = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class RuntimeServices:
+    api: NuruApi
+    memory: MemoryStore
+    state: StateStore
+    companion: CompanionService
+    voice_runtime: VoiceRuntime
+
+    def close(self) -> None:
+        self.voice_runtime.close()
+        self.api.close()
+        self.memory.close()
+        self.state.close()
 
 
 def create_client(config: BotConfig | None = None) -> Bot:
@@ -40,11 +56,26 @@ def create_client(config: BotConfig | None = None) -> Bot:
         companion=companion,
     )
 
+    services = RuntimeServices(
+        api=api,
+        memory=memory,
+        state=state,
+        companion=companion,
+        voice_runtime=voice_runtime,
+    )
+    client.nuru_services = services
+
     register_events(client, config, companion, voice_runtime)
     if config.enable_slash_commands:
         register_commands(client, companion=companion, state=state)
 
     return client
+
+
+def close_runtime_services(client: Bot) -> None:
+    services = getattr(client, "nuru_services", None)
+    if services is not None:
+        services.close()
 
 
 def main() -> None:
@@ -56,4 +87,7 @@ def main() -> None:
     config = load_config()
     client = create_client(config)
     LOGGER.info("Starting Nuru bot")
-    client.run(config.token)
+    try:
+        client.run(config.token)
+    finally:
+        close_runtime_services(client)

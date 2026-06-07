@@ -211,7 +211,7 @@ def _check_bot_runtime(config: BotConfig) -> DiagnosticResult:
     previous_loop = _current_event_loop()
     loop = asyncio.new_event_loop()
     try:
-        from .bot import create_client
+        from .bot import close_runtime_services, create_client
 
         asyncio.set_event_loop(loop)
         client = create_client(config)
@@ -219,6 +219,8 @@ def _check_bot_runtime(config: BotConfig) -> DiagnosticResult:
     except Exception as exc:
         return DiagnosticResult("discord bot", False, str(exc))
     finally:
+        if "client" in locals():
+            close_runtime_services(client)
         asyncio.set_event_loop(previous_loop)
         loop.close()
 
