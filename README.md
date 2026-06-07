@@ -38,9 +38,9 @@ Useful options:
 ```env
 NURU_API_BASE_URL=http://127.0.0.1:8000
 NURU_DATA_PATH=data/nuru_bot.sqlite3
-DISCORD_PROXY=http://127.0.0.1:10808
-DISCORD_GUILD_ID=1061629481267245086
-DISCORD_VOICE_CHANNEL_ID=1385943585597292706
+DISCORD_PROXY=
+DISCORD_GUILD_ID=
+DISCORD_VOICE_CHANNEL_ID=
 DISCORD_TEXT_CHANNEL_ID=
 NURU_CONNECT_VOICE_ON_READY=true
 NURU_ENABLE_TEXT_CHAT=false
@@ -89,6 +89,7 @@ prompt/memory/state pipeline. With `--voice-sample`, it also validates VAD,
 transcription, wake-word detection, response generation, and TTS against a real
 audio file.
 
-Use `--discord-live` only when the bot token and configured guild/voice channel
-are ready. It logs in, connects to the configured voice channel, then disconnects.
-With `--discord-live-speak`, it also starts a TTS playback check.
+Use `--discord-live` only after setting `DISCORD_GUILD_ID` and
+`DISCORD_VOICE_CHANNEL_ID` for a server where the bot is installed. It logs in,
+connects to the configured voice channel, then disconnects. With
+`--discord-live-speak`, it also starts a TTS playback check.

@@ -81,6 +81,16 @@ def test_load_config_accepts_legacy_token_and_dm_chat_flag(monkeypatch):
     assert config.enable_text_chat
 
 
+def test_load_config_does_not_default_to_specific_discord_network(monkeypatch):
+    monkeypatch.setenv("DISCORD_TOKEN", "discord-token")
+
+    config = load_config()
+
+    assert config.discord_proxy is None
+    assert config.guild_id is None
+    assert config.voice_channel_id is None
+
+
 def test_load_config_requires_token():
     with pytest.raises(RuntimeError):
         load_config()

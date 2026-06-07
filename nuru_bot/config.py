@@ -9,9 +9,9 @@ from dotenv import load_dotenv
 
 
 DEFAULT_API_BASE_URL = "http://127.0.0.1:8000"
-DEFAULT_DISCORD_PROXY = "http://127.0.0.1:10808"
-DEFAULT_GUILD_ID = 1061629481267245086
-DEFAULT_VOICE_CHANNEL_ID = 1385943585597292706
+DEFAULT_DISCORD_PROXY: str | None = None
+DEFAULT_GUILD_ID: int | None = None
+DEFAULT_VOICE_CHANNEL_ID: int | None = None
 DEFAULT_DATA_PATH = "data/nuru_bot.sqlite3"
 
 TRUE_VALUES = {"1", "true", "yes", "on"}
