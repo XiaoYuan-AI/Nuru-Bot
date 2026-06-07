@@ -4,7 +4,7 @@ import struct
 from nuru_bot.api import NuruApiError
 from nuru_bot.companion import InteractionResponse
 from nuru_bot.state import MoodState, PersonaState
-from nuru_bot.voice import VoiceRuntime
+from nuru_bot.voice import VoiceRuntime, connect_voice_channel
 
 from .helpers import make_config
 
@@ -353,9 +353,78 @@ def test_idle_commentary_skips_when_multiple_humans_are_present():
     assert companion.idle_requests == []
 
 
+def test_connect_voice_channel_falls_back_to_client_channel_lookup():
+    voice_client = FakeVoiceClient()
+    channel = FakeConnectChannel(voice_client)
+    client = FakeConnectClient(
+        guild=FakeConnectGuild(channel=None),
+        channel=channel,
+    )
+
+    connected = asyncio.run(
+        connect_voice_channel(
+            client,
+            make_config(guild_id=123, voice_channel_id=456),
+        )
+    )
+
+    assert connected is voice_client
+    assert channel.connected
+
+
+def test_connect_voice_channel_returns_none_when_connect_fails():
+    channel = FakeConnectChannel(RuntimeError("voice unavailable"))
+    client = FakeConnectClient(
+        guild=FakeConnectGuild(channel=channel),
+        channel=None,
+    )
+
+    connected = asyncio.run(
+        connect_voice_channel(
+            client,
+            make_config(guild_id=123, voice_channel_id=456),
+        )
+    )
+
+    assert connected is None
+
+
 def _loud_pcm():
     return b"".join(struct.pack("<h", 2000) for _ in range(200))
 
 
 async def _append_async(messages, text):
     messages.append(text)
+
+
+class FakeConnectClient:
+    def __init__(self, *, guild, channel):
+        self.guild = guild
+        self.channel = channel
+
+    def get_guild(self, guild_id):
+        return self.guild if guild_id == 123 else None
+
+    def get_channel(self, channel_id):
+        return self.channel if channel_id == 456 else None
+
+
+class FakeConnectGuild:
+    def __init__(self, *, channel):
+        self.channel = channel
+
+    def get_channel(self, channel_id):
+        return self.channel if channel_id == 456 else None
+
+
+class FakeConnectChannel:
+    def __init__(self, result):
+        self.result = result
+        self.connected = False
+
+    async def connect(self):
+        if isinstance(self.result, Exception):
+            raise self.result
+
+        self.connected = True
+        return self.result

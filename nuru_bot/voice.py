@@ -281,11 +281,18 @@ async def connect_voice_channel(
         return None
 
     channel = guild.get_channel(config.voice_channel_id)
+    if channel is None:
+        channel = client.get_channel(config.voice_channel_id)
     if channel is None or not hasattr(channel, "connect"):
         LOGGER.warning("Discord voice channel %s was not found", config.voice_channel_id)
         return None
 
-    voice_client = await channel.connect()
+    try:
+        voice_client = await channel.connect()
+    except Exception:
+        LOGGER.exception("Failed to connect to voice channel %s", config.voice_channel_id)
+        return None
+
     LOGGER.info("Connected to voice channel %s", config.voice_channel_id)
     return voice_client
 
