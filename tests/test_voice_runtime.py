@@ -57,6 +57,11 @@ class CapturingVoiceRuntime(VoiceRuntime):
         self.spoken.append(text)
 
 
+class FailingSpeakVoiceRuntime(CapturingVoiceRuntime):
+    async def speak(self, voice_client, text):
+        raise NuruApiError("tts unavailable")
+
+
 class FakeVoiceClient:
     def __init__(self, *, members=None, playing=False):
         self.channel = type("Channel", (), {"id": 42, "members": members or []})()
@@ -205,6 +210,29 @@ def test_recording_callback_restarts_recording_when_companion_fails():
     assert voice_client.started
     assert voice_client.recording
     assert runtime.spoken == []
+
+
+def test_recording_callback_restarts_recording_when_tts_delivery_fails():
+    runtime = FailingSpeakVoiceRuntime(
+        config=make_config(
+            record_voice_audio=True,
+            recording_segment_seconds=10,
+            voice_vad_threshold=10,
+        ),
+        api=FakeApi("hey nuru tts failure"),
+        companion=FakeCompanion(response_mode="voice"),
+    )
+    voice_client = FakeRecordingVoiceClient()
+
+    async def run_callback():
+        await runtime.recording_callback(FakeSink({123: _loud_pcm()}), voice_client)
+        runtime.close()
+        await asyncio.sleep(0)
+
+    asyncio.run(run_callback())
+
+    assert voice_client.started
+    assert voice_client.recording
 
 
 def test_start_recording_stops_segment_after_configured_delay():

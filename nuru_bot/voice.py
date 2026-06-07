@@ -160,15 +160,19 @@ class VoiceRuntime:
                 LOGGER.exception("Failed to generate a voice response")
                 continue
 
-            if response.response_mode in {"text", "both"}:
-                await _send_channel_text(
-                    self.client,
-                    self.config,
-                    voice_client,
-                    response.text,
-                )
-            if response.response_mode in {"voice", "both"}:
-                await self.speak(voice_client, response.text)
+            try:
+                if response.response_mode in {"text", "both"}:
+                    await _send_channel_text(
+                        self.client,
+                        self.config,
+                        voice_client,
+                        response.text,
+                    )
+                if response.response_mode in {"voice", "both"}:
+                    await self.speak(voice_client, response.text)
+            except Exception:
+                LOGGER.exception("Failed to deliver a voice response")
+                continue
 
         if voice_client.is_connected() and self.config.record_voice_audio:
             self.start_recording(voice_client)
