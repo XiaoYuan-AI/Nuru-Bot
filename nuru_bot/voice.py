@@ -146,15 +146,20 @@ class VoiceRuntime:
                 continue
 
             channel_id = _voice_channel_id(voice_client)
-            response = await self.companion.respond(
-                InteractionRequest(
-                    user_id=str(user_id),
-                    channel_id=channel_id,
-                    author_name=_voice_author_name(voice_client, user_id),
-                    content=transcript,
-                    source="voice",
+            try:
+                response = await self.companion.respond(
+                    InteractionRequest(
+                        user_id=str(user_id),
+                        channel_id=channel_id,
+                        author_name=_voice_author_name(voice_client, user_id),
+                        content=transcript,
+                        source="voice",
+                    )
                 )
-            )
+            except NuruApiError:
+                LOGGER.exception("Failed to generate a voice response")
+                continue
+
             if response.response_mode in {"text", "both"}:
                 await _send_channel_text(
                     self.client,

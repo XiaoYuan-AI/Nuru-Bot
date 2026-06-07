@@ -1,6 +1,7 @@
 import asyncio
 import struct
 
+from nuru_bot.api import NuruApiError
 from nuru_bot.companion import InteractionResponse
 from nuru_bot.state import MoodState, PersonaState
 from nuru_bot.voice import VoiceRuntime
@@ -39,6 +40,12 @@ class FakeCompanion:
     def idle_prompt(self, *, user_id, channel_id, author_name):
         self.idle_requests.append((user_id, channel_id, author_name))
         return "idle reply"
+
+
+class FailingCompanion(FakeCompanion):
+    async def respond(self, request):
+        self.requests.append(request)
+        raise NuruApiError("model unavailable")
 
 
 class CapturingVoiceRuntime(VoiceRuntime):
@@ -171,6 +178,32 @@ def test_recording_callback_sends_text_to_configured_channel():
     asyncio.run(runtime.recording_callback(FakeSink({123: _loud_pcm()}), FakeVoiceClient()))
 
     assert sent_messages == ["voice reply"]
+    assert runtime.spoken == []
+
+
+def test_recording_callback_restarts_recording_when_companion_fails():
+    companion = FailingCompanion()
+    runtime = CapturingVoiceRuntime(
+        config=make_config(
+            record_voice_audio=True,
+            recording_segment_seconds=10,
+            voice_vad_threshold=10,
+        ),
+        api=FakeApi("hey nuru fail safely"),
+        companion=companion,
+    )
+    voice_client = FakeRecordingVoiceClient()
+
+    async def run_callback():
+        await runtime.recording_callback(FakeSink({123: _loud_pcm()}), voice_client)
+        runtime.close()
+        await asyncio.sleep(0)
+
+    asyncio.run(run_callback())
+
+    assert companion.requests[0].content == "hey nuru fail safely"
+    assert voice_client.started
+    assert voice_client.recording
     assert runtime.spoken == []
 
 
