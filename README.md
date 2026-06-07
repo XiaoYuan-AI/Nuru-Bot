@@ -78,6 +78,7 @@ uv run nuru-bot-doctor
 uv run nuru-bot-doctor --skip-api
 ```
 
-The doctor checks token configuration, SQLite storage, FFmpeg, and the local
-Nuru API contracts for model generation, embeddings, transcription, and TTS
-streaming.
+The doctor checks token configuration, SQLite storage, Discord bot construction,
+slash command registration, FFmpeg, local Nuru API contracts for model
+generation, embeddings, transcription, TTS streaming, and the companion
+prompt/memory/state pipeline.

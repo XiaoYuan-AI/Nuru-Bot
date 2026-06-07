@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import io
 import subprocess
 import wave
@@ -8,6 +9,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from .api import NuruApi, NuruApiError
+from .companion import CompanionService, InteractionRequest
 from .config import BotConfig, load_config
 from .memory import MemoryStore
 from .state import StateStore
@@ -47,6 +49,7 @@ def run_diagnostics(
     results = [
         _check_discord_token(config),
         _check_storage(config),
+        _check_bot_runtime(config),
     ]
 
     if include_ffmpeg:
@@ -54,10 +57,12 @@ def run_diagnostics(
         results.append(checker(config.ffmpeg_executable))
 
     if include_api:
-        results.extend(check_api_contract(api or NuruApi(
+        api_client = api or NuruApi(
             config.api_base_url,
             config.request_timeout_seconds,
-        )))
+        )
+        results.extend(check_api_contract(api_client))
+        results.append(check_companion_pipeline(api_client, config))
 
     return DiagnosticReport(results)
 
@@ -117,6 +122,50 @@ def check_api_contract(api: NuruApi) -> list[DiagnosticResult]:
     return results
 
 
+def check_companion_pipeline(api: NuruApi, config: BotConfig) -> DiagnosticResult:
+    memory = MemoryStore(":memory:")
+    state = StateStore(":memory:")
+    companion = CompanionService(
+        api=api,
+        memory=memory,
+        state=state,
+        config=config,
+    )
+
+    try:
+        response = asyncio.run(
+            companion.respond(
+                InteractionRequest(
+                    user_id="diagnostic-user",
+                    channel_id="diagnostic-channel",
+                    author_name="Diagnostic",
+                    content="nuru diagnostic companion pipeline check",
+                    source="diagnostic",
+                )
+            )
+        )
+    except NuruApiError as exc:
+        return DiagnosticResult("companion pipeline", False, str(exc))
+    except Exception as exc:  # pragma: no cover - defensive diagnostics boundary
+        return DiagnosticResult("companion pipeline", False, f"unexpected error: {exc}")
+    finally:
+        memory.close()
+        state.close()
+
+    if not response.text.strip():
+        return DiagnosticResult(
+            "companion pipeline",
+            False,
+            "pipeline returned an empty response",
+        )
+
+    return DiagnosticResult(
+        "companion pipeline",
+        True,
+        f"response mode {response.response_mode}",
+    )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Check Nuru Bot runtime configuration and local service contracts.",
@@ -156,6 +205,43 @@ def _check_storage(config: BotConfig) -> DiagnosticResult:
         return DiagnosticResult("sqlite storage", False, str(exc))
 
     return DiagnosticResult("sqlite storage", True, str(config.data_path))
+
+
+def _check_bot_runtime(config: BotConfig) -> DiagnosticResult:
+    previous_loop = _current_event_loop()
+    loop = asyncio.new_event_loop()
+    try:
+        from .bot import create_client
+
+        asyncio.set_event_loop(loop)
+        client = create_client(config)
+        command_count = len(getattr(client, "pending_application_commands", []))
+    except Exception as exc:
+        return DiagnosticResult("discord bot", False, str(exc))
+    finally:
+        asyncio.set_event_loop(previous_loop)
+        loop.close()
+
+    if config.enable_slash_commands and command_count == 0:
+        return DiagnosticResult(
+            "discord bot",
+            False,
+            "slash commands are enabled but none were registered",
+        )
+
+    detail = (
+        f"registered {command_count} slash command(s)"
+        if config.enable_slash_commands
+        else "slash commands disabled"
+    )
+    return DiagnosticResult("discord bot", True, detail)
+
+
+def _current_event_loop() -> asyncio.AbstractEventLoop | None:
+    try:
+        return asyncio.get_event_loop()
+    except RuntimeError:
+        return None
 
 
 def _has_tts_chunk(api: NuruApi) -> bool:

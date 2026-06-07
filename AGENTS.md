@@ -34,9 +34,10 @@ uv lock --check
 
 `uv sync` installs locked dependencies. `python -m nuru_bot` runs the package
 entry point. `nuru-bot-doctor` checks runtime configuration, SQLite storage,
-FFmpeg, and local API contracts. `pytest` runs the unit tests. `compileall`
-catches syntax/import-time issues without logging in to Discord. `uv lock
---check` verifies `pyproject.toml` and `uv.lock` are aligned.
+Discord bot construction, FFmpeg, local API contracts, and the companion
+pipeline. `pytest` runs the unit tests. `compileall` catches syntax/import-time
+issues without logging in to Discord. `uv lock --check` verifies `pyproject.toml`
+and `uv.lock` are aligned.
 
 ## Coding Style & Naming Conventions
 

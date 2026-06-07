@@ -41,11 +41,13 @@ def test_run_diagnostics_reports_token_storage_ffmpeg_and_api(tmp_path):
     assert [result.name for result in report.results] == [
         "discord token",
         "sqlite storage",
+        "discord bot",
         "ffmpeg",
         "api:model",
         "api:embeddings",
         "api:transcribe",
         "api:tts-stream",
+        "companion pipeline",
     ]
 
 
@@ -58,6 +60,7 @@ def test_run_diagnostics_can_skip_external_checks(tmp_path):
     assert [result.name for result in report.results] == [
         "discord token",
         "sqlite storage",
+        "discord bot",
     ]
     assert "set DISCORD_TOKEN" in report.format_text()
 
@@ -68,6 +71,16 @@ def test_check_api_contract_fails_empty_tts_stream():
     tts_result = next(result for result in results if result.name == "api:tts-stream")
     assert not tts_result.ok
     assert tts_result.detail == "contract returned an empty response"
+
+
+def test_run_diagnostics_reports_registered_slash_commands(tmp_path):
+    config = _config(tmp_path / "state.sqlite3", token="token")
+
+    report = run_diagnostics(config, include_api=False, include_ffmpeg=False)
+
+    bot_result = next(result for result in report.results if result.name == "discord bot")
+    assert bot_result.ok
+    assert bot_result.detail == "registered 4 slash command(s)"
 
 
 def test_load_config_can_skip_token_requirement(monkeypatch, tmp_path):
