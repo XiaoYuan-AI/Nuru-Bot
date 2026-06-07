@@ -260,8 +260,8 @@ class VoiceRuntime:
                 author_name=alone_user.display_name,
             )
             await self.speak(voice_client, text)
-        except NuruApiError:
-            LOGGER.exception("Failed to generate idle commentary")
+        except Exception:
+            LOGGER.exception("Failed to run idle commentary")
             return False
 
         return True

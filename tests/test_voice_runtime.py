@@ -62,6 +62,11 @@ class FailingSpeakVoiceRuntime(CapturingVoiceRuntime):
         raise NuruApiError("tts unavailable")
 
 
+class CrashingSpeakVoiceRuntime(CapturingVoiceRuntime):
+    async def speak(self, voice_client, text):
+        raise RuntimeError("ffmpeg unavailable")
+
+
 class FakeVoiceClient:
     def __init__(self, *, members=None, playing=False):
         self.channel = type("Channel", (), {"id": 42, "members": members or []})()
@@ -312,6 +317,22 @@ def test_idle_commentary_runs_after_silence_when_one_user_is_alone():
     assert asyncio.run(runtime.maybe_run_idle_commentary())
     assert companion.idle_requests == [("321", "42", "Solo")]
     assert runtime.spoken == ["idle reply"]
+
+
+def test_idle_commentary_returns_false_when_delivery_crashes():
+    user = type("Member", (), {"id": 321, "display_name": "Solo", "bot": False})()
+    companion = FakeCompanion()
+    runtime = CrashingSpeakVoiceRuntime(
+        config=make_config(idle_commentary_seconds=30),
+        api=FakeApi("nuru"),
+        companion=companion,
+    )
+    runtime.voice_client = FakeVoiceClient(members=[user])
+    runtime.last_voice_activity_at = 0.0
+    runtime.last_idle_commentary_at = 0.0
+
+    assert not asyncio.run(runtime.maybe_run_idle_commentary())
+    assert companion.idle_requests == [("321", "42", "Solo")]
 
 
 def test_idle_commentary_skips_when_multiple_humans_are_present():
