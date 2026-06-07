@@ -6,7 +6,7 @@ import logging
 from discord import Activity, ActivityType, Client, DMChannel, Message, Reaction, User
 
 from .api import NuruApiError
-from .companion import CompanionService, InteractionRequest
+from .companion import CompanionService, InteractionRequest, InteractionResponse
 from .config import BotConfig
 from .voice import VoiceRuntime
 
@@ -40,7 +40,7 @@ def register_events(
 
         @client.event
         async def on_reaction_add(reaction: Reaction, user: User) -> None:
-            await handle_dm_reaction(client, reaction, user, companion)
+            await handle_dm_reaction(client, reaction, user, companion, voice_runtime)
 
 
 async def handle_text_message(
@@ -75,15 +75,7 @@ async def handle_text_message(
         await message.channel.send("The local model service did not return a response.")
         return
 
-    if response.response_mode in {"text", "both"}:
-        await message.channel.send(response.text)
-
-    if response.response_mode in {"voice", "both"}:
-        voice_client = voice_runtime.voice_client
-        if voice_client is not None and voice_client.is_connected():
-            await voice_runtime.speak(voice_client, response.text)
-        elif response.response_mode == "voice":
-            await message.channel.send("I am not connected to a voice channel yet.")
+    await deliver_interaction_response(message.channel, response, voice_runtime)
 
 
 async def handle_dm_reaction(
@@ -91,6 +83,7 @@ async def handle_dm_reaction(
     reaction: Reaction,
     user: User,
     companion: CompanionService,
+    voice_runtime: VoiceRuntime,
 ) -> None:
     if user == client.user:
         return
@@ -116,7 +109,29 @@ async def handle_dm_reaction(
         )
         return
 
-    await reaction.message.channel.send(response.text)
+    await deliver_interaction_response(reaction.message.channel, response, voice_runtime)
+
+
+async def deliver_interaction_response(
+    channel: object,
+    response: InteractionResponse,
+    voice_runtime: VoiceRuntime,
+) -> None:
+    if response.response_mode in {"text", "both"}:
+        send = getattr(channel, "send", None)
+        if send is not None:
+            await send(response.text)
+
+    if response.response_mode in {"voice", "both"}:
+        voice_client = voice_runtime.voice_client
+        if voice_client is not None and voice_client.is_connected():
+            await voice_runtime.speak(voice_client, response.text)
+            return
+
+        if response.response_mode == "voice":
+            send = getattr(channel, "send", None)
+            if send is not None:
+                await send("I am not connected to a voice channel yet.")
 
 
 async def _message_prompt_parts(
