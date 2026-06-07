@@ -44,7 +44,7 @@ class BotConfig:
 
 
 def load_config() -> BotConfig:
-    load_dotenv()
+    load_dotenv(dotenv_path=Path(".env"), override=False)
 
     token = _optional_env("DISCORD_TOKEN") or _optional_env("TOKEN")
     if token is None:
