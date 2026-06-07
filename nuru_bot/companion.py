@@ -45,14 +45,6 @@ class CompanionService:
 
     async def respond(self, request: InteractionRequest) -> InteractionResponse:
         user_embedding = self.embed_text(request.content)
-        self.memory.add_entry(
-            user_id=request.user_id,
-            channel_id=request.channel_id,
-            role="user",
-            content=request.content,
-            embedding=user_embedding,
-        )
-
         mood = self.state.adjust_mood_from_text(request.content)
         persona = self.state.get_persona()
         memories = self.memory.search(
@@ -60,6 +52,13 @@ class CompanionService:
             user_id=request.user_id,
             channel_id=request.channel_id,
             limit=self.config.memory_context_limit,
+        )
+        self.memory.add_entry(
+            user_id=request.user_id,
+            channel_id=request.channel_id,
+            role="user",
+            content=request.content,
+            embedding=user_embedding,
         )
         prompt = self.build_prompt(request, mood, persona, memories)
         response_text = self.api.generate(prompt)

@@ -49,6 +49,34 @@ def test_companion_stores_user_and_assistant_entries_in_same_scope():
     assert response.mood.energy > 0.5
 
 
+def test_companion_prompt_does_not_treat_current_message_as_memory():
+    api = FakeApi()
+    memory = MemoryStore(":memory:")
+    state = StateStore(":memory:")
+    service = CompanionService(
+        api=api,
+        memory=memory,
+        state=state,
+        config=make_config(),
+    )
+
+    asyncio.run(
+        service.respond(
+            InteractionRequest(
+                user_id="user-1",
+                channel_id="channel-1",
+                author_name="Tester",
+                content="brand new active turn",
+                source="text",
+            )
+        )
+    )
+
+    prompt = api.prompts[0]
+    assert "- No relevant memories yet." in prompt
+    assert prompt.count("brand new active turn") == 1
+
+
 def test_idle_prompt_uses_recent_scoped_memories():
     api = FakeApi()
     memory = MemoryStore(":memory:")
