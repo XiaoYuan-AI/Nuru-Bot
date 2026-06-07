@@ -1,13 +1,210 @@
 from __future__ import annotations
 
+import asyncio
+import io
 import logging
+import math
+import time
+import wave
+from collections.abc import Iterable, Iterator
 
-from discord import Client, VoiceClient, sinks
+from discord import Client, FFmpegPCMAudio, VoiceClient, sinks
 
+from .api import NuruApi, NuruApiError
+from .companion import CompanionService, InteractionRequest
 from .config import BotConfig
 
 
 LOGGER = logging.getLogger(__name__)
+
+
+class VoiceActivityDetector:
+    def __init__(self, rms_threshold: float) -> None:
+        self.rms_threshold = rms_threshold
+
+    def detects_speech(self, audio_data: bytes) -> bool:
+        pcm = _extract_pcm(audio_data)
+        if len(pcm) < 2:
+            return False
+
+        sample_count = len(pcm) // 2
+        if sample_count == 0:
+            return False
+
+        total = 0
+        for index in range(0, len(pcm) - 1, 2):
+            sample = int.from_bytes(pcm[index : index + 2], "little", signed=True)
+            total += sample * sample
+
+        rms = math.sqrt(total / sample_count)
+        return rms >= self.rms_threshold
+
+
+class HotwordDetector:
+    def __init__(self, hotwords: Iterable[str]) -> None:
+        self.hotwords = tuple(word.lower() for word in hotwords if word.strip())
+
+    def matches(self, transcript: str) -> bool:
+        lowered = transcript.lower()
+        return any(hotword in lowered for hotword in self.hotwords)
+
+
+class IteratorAudioStream(io.RawIOBase):
+    def __init__(self, chunks: Iterator[bytes]) -> None:
+        self._chunks = chunks
+        self._buffer = bytearray()
+        self._closed = False
+
+    def readable(self) -> bool:
+        return True
+
+    def read(self, size: int = -1) -> bytes:
+        if self._closed:
+            return b""
+
+        if size is None or size < 0:
+            parts = [bytes(self._buffer)]
+            self._buffer.clear()
+            parts.extend(self._chunks)
+            self._closed = True
+            return b"".join(parts)
+
+        while len(self._buffer) < size:
+            try:
+                self._buffer.extend(next(self._chunks))
+            except StopIteration:
+                self._closed = True
+                break
+
+        data = bytes(self._buffer[:size])
+        del self._buffer[:size]
+        return data
+
+
+class VoiceRuntime:
+    def __init__(
+        self,
+        *,
+        config: BotConfig,
+        api: NuruApi,
+        companion: CompanionService,
+    ) -> None:
+        self.config = config
+        self.api = api
+        self.companion = companion
+        self.vad = VoiceActivityDetector(config.voice_vad_threshold)
+        self.hotwords = HotwordDetector(config.wake_words)
+        self.last_voice_activity_at = time.monotonic()
+        self.last_idle_commentary_at = 0.0
+        self.voice_client: VoiceClient | None = None
+        self._idle_task: asyncio.Task[None] | None = None
+
+    async def connect(self, client: Client) -> VoiceClient | None:
+        voice_client = await connect_voice_channel(client, self.config)
+        self.voice_client = voice_client
+
+        if voice_client is None:
+            return None
+
+        if self.config.record_voice_audio:
+            self.start_recording(voice_client)
+
+        if self.config.enable_idle_commentary:
+            self.start_idle_commentary_loop(client)
+
+        return voice_client
+
+    def start_recording(self, voice_client: VoiceClient) -> None:
+        voice_client.start_recording(sinks.WaveSink(), self.recording_callback, voice_client)
+
+    async def recording_callback(
+        self,
+        sink: sinks.WaveSink,
+        voice_client: VoiceClient,
+    ) -> None:
+        for user_id, audio in sink.audio_data.items():
+            audio_bytes = extract_audio_bytes(audio)
+            if not self.vad.detects_speech(audio_bytes):
+                continue
+
+            self.last_voice_activity_at = time.monotonic()
+            try:
+                transcript = await asyncio.to_thread(self.api.transcribe_audio, audio_bytes)
+            except NuruApiError:
+                LOGGER.exception("Failed to transcribe voice audio")
+                continue
+
+            if not self.hotwords.matches(transcript):
+                LOGGER.info("Ignoring voice transcript without wake word: %s", transcript)
+                continue
+
+            channel_id = _voice_channel_id(voice_client)
+            response = await self.companion.respond(
+                InteractionRequest(
+                    user_id=str(user_id),
+                    channel_id=channel_id,
+                    author_name=str(user_id),
+                    content=transcript,
+                    source="voice",
+                )
+            )
+            if response.response_mode in {"text", "both"}:
+                await _send_channel_text(voice_client, response.text)
+            if response.response_mode in {"voice", "both"}:
+                await self.speak(voice_client, response.text)
+
+        if voice_client.is_connected() and self.config.record_voice_audio:
+            self.start_recording(voice_client)
+
+    async def speak(self, voice_client: VoiceClient, text: str) -> None:
+        if not text.strip():
+            return
+
+        chunks = self.api.stream_tts(text, voice=self.config.tts_voice)
+        source = FFmpegPCMAudio(
+            IteratorAudioStream(chunks),
+            pipe=True,
+            executable=self.config.ffmpeg_executable,
+        )
+        if voice_client.is_playing():
+            voice_client.stop()
+        voice_client.play(source)
+
+    def start_idle_commentary_loop(self, client: Client) -> None:
+        if self._idle_task is not None and not self._idle_task.done():
+            return
+        self._idle_task = client.loop.create_task(self._idle_commentary_loop(client))
+
+    async def _idle_commentary_loop(self, client: Client) -> None:
+        while not client.is_closed():
+            await asyncio.sleep(5)
+            voice_client = self.voice_client
+            if voice_client is None or not voice_client.is_connected():
+                continue
+            if voice_client.is_playing():
+                continue
+
+            now = time.monotonic()
+            if now - self.last_voice_activity_at < self.config.idle_commentary_seconds:
+                continue
+            if now - self.last_idle_commentary_at < self.config.idle_commentary_seconds:
+                continue
+
+            alone_user = _single_human_member(voice_client)
+            if alone_user is None:
+                continue
+
+            self.last_idle_commentary_at = now
+            try:
+                text = await asyncio.to_thread(
+                    self.companion.idle_prompt,
+                    user_id=str(alone_user.id),
+                    channel_id=_voice_channel_id(voice_client),
+                    author_name=alone_user.display_name,
+                )
+                await self.speak(voice_client, text)
+            except NuruApiError:
+                LOGGER.exception("Failed to generate idle commentary")
 
 
 async def connect_voice_channel(
@@ -30,20 +227,63 @@ async def connect_voice_channel(
 
     voice_client = await channel.connect()
     LOGGER.info("Connected to voice channel %s", config.voice_channel_id)
-
-    if config.record_voice_audio:
-        start_recording(voice_client)
-
     return voice_client
 
 
-def start_recording(voice_client: VoiceClient) -> None:
-    voice_client.start_recording(sinks.WaveSink(), recording_callback, voice_client)
+def extract_audio_bytes(audio: object) -> bytes:
+    file_obj = getattr(audio, "file", None)
+    if file_obj is not None:
+        if hasattr(file_obj, "seek"):
+            file_obj.seek(0)
+        data = file_obj.read()
+        if isinstance(data, bytes):
+            return data
+
+    data = getattr(audio, "data", None)
+    if isinstance(data, bytes):
+        return data
+
+    if isinstance(audio, bytes):
+        return audio
+
+    return b""
 
 
-async def recording_callback(sink: sinks.WaveSink, voice_client: VoiceClient) -> None:
-    for user_id in sink.audio_data:
-        LOGGER.info("Captured voice audio for user %s", user_id)
+def _extract_pcm(audio_data: bytes) -> bytes:
+    if audio_data.startswith(b"RIFF"):
+        try:
+            with wave.open(io.BytesIO(audio_data), "rb") as wave_file:
+                return wave_file.readframes(wave_file.getnframes())
+        except wave.Error:
+            return audio_data
+    return audio_data
 
-    if voice_client.is_connected():
-        start_recording(voice_client)
+
+def _voice_channel_id(voice_client: VoiceClient) -> str:
+    channel = getattr(voice_client, "channel", None)
+    channel_id = getattr(channel, "id", "voice")
+    return str(channel_id)
+
+
+def _single_human_member(voice_client: VoiceClient) -> object | None:
+    channel = getattr(voice_client, "channel", None)
+    members = getattr(channel, "members", None)
+    if members is None:
+        return None
+
+    human_members = [
+        member
+        for member in members
+        if not getattr(member, "bot", False)
+    ]
+    if len(human_members) != 1:
+        return None
+    return human_members[0]
+
+
+async def _send_channel_text(voice_client: VoiceClient, text: str) -> None:
+    channel = getattr(voice_client, "channel", None)
+    send = getattr(channel, "send", None)
+    if send is None:
+        return
+    await send(text)
