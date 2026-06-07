@@ -118,20 +118,51 @@ async def deliver_interaction_response(
     voice_runtime: VoiceRuntime,
 ) -> None:
     if response.response_mode in {"text", "both"}:
-        send = getattr(channel, "send", None)
-        if send is not None:
-            await send(response.text)
+        await _send_channel_message(
+            channel,
+            response.text,
+            failure_log="Failed to send text interaction response",
+        )
 
     if response.response_mode in {"voice", "both"}:
         voice_client = voice_runtime.voice_client
         if voice_client is not None and voice_client.is_connected():
-            await voice_runtime.speak(voice_client, response.text)
+            try:
+                await voice_runtime.speak(voice_client, response.text)
+            except Exception:
+                LOGGER.exception("Failed to deliver voice interaction response")
+                if response.response_mode == "voice":
+                    await _send_channel_message(
+                        channel,
+                        "I could not play that in voice.",
+                        failure_log="Failed to send voice delivery fallback",
+                    )
             return
 
         if response.response_mode == "voice":
-            send = getattr(channel, "send", None)
-            if send is not None:
-                await send("I am not connected to a voice channel yet.")
+            await _send_channel_message(
+                channel,
+                "I am not connected to a voice channel yet.",
+                failure_log="Failed to send missing voice connection fallback",
+            )
+
+
+async def _send_channel_message(
+    channel: object,
+    text: str,
+    *,
+    failure_log: str,
+) -> bool:
+    send = getattr(channel, "send", None)
+    if send is None:
+        return False
+
+    try:
+        await send(text)
+    except Exception:
+        LOGGER.exception(failure_log)
+        return False
+    return True
 
 
 async def _message_prompt_parts(

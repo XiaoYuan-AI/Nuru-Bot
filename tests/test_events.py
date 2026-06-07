@@ -16,6 +16,24 @@ def test_deliver_interaction_response_sends_text_and_voice():
     assert voice_runtime.spoken == ["hello"]
 
 
+def test_deliver_interaction_response_speaks_when_text_send_fails():
+    channel = FailingChannel()
+    voice_runtime = FakeVoiceRuntime(connected=True)
+
+    asyncio.run(events.deliver_interaction_response(channel, _response("both"), voice_runtime))
+
+    assert voice_runtime.spoken == ["hello"]
+
+
+def test_deliver_interaction_response_sends_fallback_when_voice_playback_fails():
+    channel = FakeChannel()
+    voice_runtime = FailingVoiceRuntime()
+
+    asyncio.run(events.deliver_interaction_response(channel, _response("voice"), voice_runtime))
+
+    assert channel.sent == ["I could not play that in voice."]
+
+
 def test_deliver_interaction_response_warns_when_voice_only_without_connection():
     channel = FakeChannel()
     voice_runtime = FakeVoiceRuntime(connected=False)
@@ -75,6 +93,11 @@ class FakeChannel:
         self.sent.append(message)
 
 
+class FailingChannel(FakeChannel):
+    async def send(self, message):
+        raise RuntimeError("send failed")
+
+
 class FakeDmChannel(FakeChannel):
     id = 456
 
@@ -94,6 +117,14 @@ class FakeVoiceRuntime:
 
     async def speak(self, voice_client, text):
         self.spoken.append(text)
+
+
+class FailingVoiceRuntime(FakeVoiceRuntime):
+    def __init__(self):
+        super().__init__(connected=True)
+
+    async def speak(self, voice_client, text):
+        raise RuntimeError("tts failed")
 
 
 class FakeCompanion:
