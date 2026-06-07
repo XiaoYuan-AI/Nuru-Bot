@@ -185,6 +185,9 @@ async def _message_prompt_parts(
         except NuruApiError:
             LOGGER.exception("Failed to describe image attachment %s", attachment.filename)
             continue
+        except Exception:
+            LOGGER.exception("Unexpected image attachment failure %s", attachment.filename)
+            continue
 
         prompt_parts.append(f"(Image description: {description})")
 

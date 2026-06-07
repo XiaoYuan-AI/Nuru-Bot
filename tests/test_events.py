@@ -111,6 +111,26 @@ def test_message_prompt_parts_skips_failed_image_and_empty_mention():
     assert prompt_parts == []
 
 
+def test_message_prompt_parts_keeps_text_when_image_read_crashes():
+    attachment = FakeAttachment("image.png", read_error=RuntimeError("cdn failed"))
+    message = FakeTextMessage(content="hello anyway", attachments=[attachment])
+    companion = FakeCompanion(_response("text"))
+
+    prompt_parts = asyncio.run(events._message_prompt_parts(message, companion))
+
+    assert prompt_parts == ["hello anyway"]
+
+
+def test_message_prompt_parts_keeps_text_when_image_description_crashes():
+    attachment = FakeAttachment("image.png")
+    message = FakeTextMessage(content="hello anyway", attachments=[attachment])
+    companion = FakeCompanion(_response("text"), describe_error=RuntimeError("vision failed"))
+
+    prompt_parts = asyncio.run(events._message_prompt_parts(message, companion))
+
+    assert prompt_parts == ["hello anyway"]
+
+
 def _response(response_mode):
     return InteractionResponse(
         text="hello",
@@ -206,10 +226,13 @@ class FakeTextMessage:
 
 
 class FakeAttachment:
-    def __init__(self, filename):
+    def __init__(self, filename, read_error=None):
         self.filename = filename
+        self.read_error = read_error
 
     async def read(self):
+        if self.read_error is not None:
+            raise self.read_error
         return b"image"
 
 
