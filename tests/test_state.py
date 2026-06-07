@@ -38,6 +38,33 @@ def test_user_response_mode_overrides_channel_default(tmp_path):
     )
 
 
+def test_response_modes_persist_across_store_instances(tmp_path):
+    database_path = tmp_path / "state.sqlite3"
+    store = StateStore(database_path)
+    store.set_response_mode(scope_type="channel", scope_id="channel-1", mode="voice")
+    store.set_response_mode(scope_type="user", scope_id="user-1", mode="both")
+    store.close()
+
+    reopened = StateStore(database_path)
+
+    assert (
+        reopened.get_response_mode(
+            user_id="user-1",
+            channel_id="channel-1",
+            default="text",
+        )
+        == "both"
+    )
+    assert (
+        reopened.get_response_mode(
+            user_id="user-2",
+            channel_id="channel-1",
+            default="text",
+        )
+        == "voice"
+    )
+
+
 def test_clear_response_mode_restores_fallback(tmp_path):
     store = StateStore(tmp_path / "state.sqlite3")
     store.set_response_mode(scope_type="channel", scope_id="channel-1", mode="voice")
