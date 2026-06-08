@@ -83,6 +83,16 @@ uv run python bot.py
 uv run python main.py
 ```
 
+## Docker
+
+```powershell
+docker build -t nuru-bot .
+docker run --rm --env-file .env -v ${PWD}/data:/app/data nuru-bot
+```
+
+The container includes FFmpeg and expects `DISCORD_TOKEN` plus a reachable
+`NURU_API_BASE_URL`.
+
 ## Test
 
 ```powershell
