@@ -266,6 +266,15 @@ class CompanionService:
         results: list[dict[str, object]] = []
         execute_tool_call = getattr(self.api, "execute_tool_call", None)
         for tool_call in tool_calls:
+            if not tool_call.safe:
+                results.append(
+                    {
+                        "action": tool_call.action,
+                        "success": False,
+                        "result": "Tool call was marked unsafe.",
+                    }
+                )
+                continue
             if not callable(execute_tool_call):
                 results.append(
                     {
@@ -346,6 +355,8 @@ class CompanionService:
         first = tool_results[0]
         action = str(first.get("action", "tool"))
         result = first.get("result")
+        if first.get("success") is False and result:
+            return str(result)
         if action == "calculator" and isinstance(result, dict):
             return f"Calculated: {result.get('value')}"
         if action == "set_reminder":

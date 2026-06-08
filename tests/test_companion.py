@@ -50,6 +50,12 @@ class ToolApi(FakeApi):
         }
 
 
+class UnsafeToolApi(FakeApi):
+    def generate(self, prompt):
+        self.prompts.append(prompt)
+        return '{"action": "calculator", "parameters": {"expression": "2 + 2"}, "safe": false}'
+
+
 class UnsafeApi(FakeApi):
     def generate(self, prompt):
         self.prompts.append(prompt)
@@ -144,6 +150,41 @@ def test_companion_executes_tool_calls_and_keeps_visible_text():
     assert response.tool_calls[0]["action"] == "calculator"
     assert response.tool_results[0]["result"]["value"] == 4
     assert api.tool_calls[0]["parameters"]["expression"] == "2 + 2"
+
+
+def test_companion_skips_unsafe_tool_calls():
+    api = UnsafeToolApi()
+    memory = MemoryStore(":memory:")
+    state = StateStore(":memory:")
+    service = CompanionService(
+        api=api,
+        memory=memory,
+        state=state,
+        config=make_config(),
+    )
+
+    response = asyncio.run(
+        service.respond(
+            InteractionRequest(
+                user_id="user-1",
+                channel_id="channel-1",
+                author_name="Tester",
+                content="run unsafe calculator",
+                source="text",
+            )
+        )
+    )
+
+    assert response.text == "Tool call was marked unsafe."
+    assert response.tool_calls[0]["safe"] is False
+    assert response.tool_results == [
+        {
+            "action": "calculator",
+            "success": False,
+            "result": "Tool call was marked unsafe.",
+        }
+    ]
+    assert api.tool_calls == []
 
 
 def test_companion_moderates_unsafe_output():
