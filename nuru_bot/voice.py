@@ -201,19 +201,23 @@ class VoiceRuntime:
                 LOGGER.exception("Unexpected voice response generation failure")
                 continue
 
-            try:
-                if response.response_mode in {"text", "both"}:
+            if response.response_mode in {"text", "both"}:
+                try:
                     await _send_channel_text(
                         self.client,
                         self.config,
                         voice_client,
                         response.text,
                     )
-                if response.response_mode in {"voice", "both"}:
+                except Exception:
+                    LOGGER.exception("Failed to send voice-triggered text response")
+
+            if response.response_mode in {"voice", "both"}:
+                try:
                     await self.speak(voice_client, response.text)
-            except Exception:
-                LOGGER.exception("Failed to deliver a voice response")
-                continue
+                except Exception:
+                    LOGGER.exception("Failed to deliver a voice-triggered TTS response")
+                    continue
 
         if voice_client.is_connected() and self.config.record_voice_audio:
             self.start_recording(voice_client)

@@ -259,6 +259,38 @@ def test_recording_callback_falls_back_to_voice_channel_when_configured_text_fai
     assert runtime.spoken == []
 
 
+def test_recording_callback_still_speaks_both_when_text_delivery_fails():
+    companion = FakeCompanion(response_mode="both")
+    runtime = CapturingVoiceRuntime(
+        config=make_config(voice_vad_threshold=10, text_channel_id=99),
+        api=FakeApi("nuru respond in both modes"),
+        companion=companion,
+    )
+    failing_text_channel = type(
+        "TextChannel",
+        (),
+        {"send": lambda self, text: _raise_async(RuntimeError("send failed"))},
+    )()
+    runtime.client = type(
+        "Client",
+        (),
+        {
+            "get_channel": (
+                lambda self, channel_id: failing_text_channel if channel_id == 99 else None
+            )
+        },
+    )()
+
+    asyncio.run(
+        runtime.recording_callback(
+            FakeSink({123: _loud_pcm()}),
+            FakeVoiceClient(channel=FailingSendChannel()),
+        )
+    )
+
+    assert runtime.spoken == ["voice reply"]
+
+
 def test_recording_callback_restarts_recording_when_companion_fails():
     companion = FailingCompanion()
     runtime = CapturingVoiceRuntime(
@@ -608,6 +640,14 @@ class FakeSendChannel:
 
     async def send(self, text):
         self.sent.append(text)
+
+
+class FailingSendChannel:
+    id = 42
+    members = []
+
+    async def send(self, text):
+        raise RuntimeError("voice channel send failed")
 
 
 class FakeConnectClient:
