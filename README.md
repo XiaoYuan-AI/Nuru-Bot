@@ -10,15 +10,16 @@ model service.
 |-- bot.py              # Compatibility launcher: python bot.py
 |-- main.py             # Compatibility launcher: python main.py
 |-- nuru_bot/
-|   |-- api.py          # Local HTTP model/vision API client
+|   |-- api.py          # Local HTTP model, vision, embeddings, transcription, and TTS client
 |   |-- bot.py          # Discord client factory and app entry point
 |   |-- commands.py     # Slash command registration
 |   |-- companion.py    # Prompting, memory use, and response orchestration
 |   |-- config.py       # Environment configuration parsing
+|   |-- diagnostics.py  # Offline/API/Discord doctor command
 |   |-- events.py       # Discord event handlers
 |   |-- memory.py       # SQLite long-term chat memory and embeddings
 |   |-- state.py        # SQLite mood, persona, and response preferences
-|   `-- voice.py        # Voice-channel connection and recording hooks
+|   `-- voice.py        # Voice VAD, wake words, recording, TTS, and idle commentary
 `-- pyproject.toml
 ```
 
@@ -37,18 +38,32 @@ Useful options:
 
 ```env
 NURU_API_BASE_URL=http://127.0.0.1:8000
+NURU_REQUEST_TIMEOUT_SECONDS=30
 NURU_DATA_PATH=data/nuru_bot.sqlite3
 DISCORD_PROXY=
 DISCORD_GUILD_ID=
 DISCORD_VOICE_CHANNEL_ID=
 DISCORD_TEXT_CHANNEL_ID=
 NURU_CONNECT_VOICE_ON_READY=true
-NURU_ENABLE_TEXT_CHAT=false
-NURU_ENABLE_REACTION_CHAT=false
-NURU_DEFAULT_RESPONSE_MODE=text
+NURU_RECORD_VOICE_AUDIO=false
+NURU_ENABLE_IDLE_COMMENTARY=true
+NURU_IDLE_COMMENTARY_SECONDS=30
+NURU_VAD_RMS_THRESHOLD=500
 NURU_RECORDING_SEGMENT_SECONDS=5
 NURU_WAKE_WORDS=nuru,hey nuru
+NURU_ACTIVITY_NAME=Still WIP
+NURU_ENABLE_TEXT_CHAT=false
+NURU_ENABLE_REACTION_CHAT=false
+NURU_ENABLE_SLASH_COMMANDS=true
+NURU_DEFAULT_RESPONSE_MODE=text
+NURU_MEMORY_CONTEXT_LIMIT=6
+NURU_TTS_VOICE=
+NURU_FFMPEG_EXECUTABLE=ffmpeg
 ```
+
+For the voice loop, set `DISCORD_GUILD_ID`, `DISCORD_VOICE_CHANNEL_ID`, and
+`NURU_RECORD_VOICE_AUDIO=true`. Install FFmpeg and keep `NURU_IDLE_COMMENTARY_SECONDS`
+at `30` or higher so idle commentary only runs after sustained silence.
 
 ## Run
 
