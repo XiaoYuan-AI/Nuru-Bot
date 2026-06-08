@@ -1,3 +1,6 @@
+import json
+import sqlite3
+
 from nuru_bot.state import StateStore
 
 
@@ -110,3 +113,59 @@ def test_mood_ignores_sentiment_substrings_inside_other_words(tmp_path):
 
     assert store.adjust_mood_from_text("goodbye badminton").energy == 0.5
     assert store.adjust_mood_from_text("thank-you, nice work").energy == 0.6
+
+
+def test_mood_falls_back_when_persisted_json_is_malformed(tmp_path):
+    database_path = tmp_path / "state.sqlite3"
+    StateStore(database_path).close()
+    _write_bot_state(database_path, "mood", "{not valid json")
+
+    store = StateStore(database_path)
+
+    assert store.get_mood().label == "curious"
+    assert store.get_mood().energy == 0.5
+
+
+def test_mood_clamps_out_of_range_persisted_energy(tmp_path):
+    database_path = tmp_path / "state.sqlite3"
+    StateStore(database_path).close()
+    _write_bot_state(
+        database_path,
+        "mood",
+        {"label": "excited", "energy": 2.0, "updated_at": "then"},
+    )
+
+    assert StateStore(database_path).get_mood().energy == 1.0
+
+
+def test_persona_falls_back_when_persisted_payload_is_malformed(tmp_path):
+    database_path = tmp_path / "state.sqlite3"
+    StateStore(database_path).close()
+    _write_bot_state(
+        database_path,
+        "persona",
+        {"name": "", "prompt": "", "updated_at": "then"},
+    )
+
+    persona = StateStore(database_path).get_persona()
+
+    assert persona.name == "nuru"
+    assert persona.prompt
+
+
+def _write_bot_state(database_path, key, payload):
+    if not isinstance(payload, str):
+        payload = json.dumps(payload)
+
+    with sqlite3.connect(database_path) as connection:
+        connection.execute(
+            """
+            INSERT INTO bot_state(key, value_json, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(key)
+            DO UPDATE SET
+                value_json = excluded.value_json,
+                updated_at = excluded.updated_at
+            """,
+            (key, payload, "then"),
+        )

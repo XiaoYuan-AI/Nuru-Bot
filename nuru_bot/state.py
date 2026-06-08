@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import logging
+import math
 import re
 import sqlite3
 import threading
@@ -20,6 +22,7 @@ DEFAULT_PERSONA_PROMPTS = {
     "supportive": "Warm, patient, concise, and focused on helping the user.",
     "chaotic": "High-energy, witty, spontaneous, but still safe and coherent.",
 }
+LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -50,11 +53,28 @@ class StateStore:
     def get_mood(self) -> MoodState:
         payload = self._get_json("mood")
         if payload is None:
-            return MoodState(label="curious", energy=0.5, updated_at=_now())
+            return _default_mood()
+        try:
+            energy = float(payload["energy"])
+        except (KeyError, TypeError, ValueError):
+            LOGGER.warning("Ignoring malformed persisted mood state")
+            return _default_mood()
+
+        if not math.isfinite(energy):
+            LOGGER.warning("Ignoring non-finite persisted mood energy")
+            return _default_mood()
+
+        try:
+            label = str(payload["label"])
+            updated_at = str(payload["updated_at"])
+        except KeyError:
+            LOGGER.warning("Ignoring incomplete persisted mood state")
+            return _default_mood()
+
         return MoodState(
-            label=str(payload["label"]),
-            energy=float(payload["energy"]),
-            updated_at=str(payload["updated_at"]),
+            label=label,
+            energy=max(0.0, min(1.0, energy)),
+            updated_at=updated_at,
         )
 
     def set_mood(self, label: str, energy: float) -> MoodState:
@@ -85,16 +105,20 @@ class StateStore:
     def get_persona(self) -> PersonaState:
         payload = self._get_json("persona")
         if payload is None:
-            return PersonaState(
-                name="nuru",
-                prompt=DEFAULT_PERSONA_PROMPTS["nuru"],
-                updated_at=_now(),
-            )
-        return PersonaState(
-            name=str(payload["name"]),
-            prompt=str(payload["prompt"]),
-            updated_at=str(payload["updated_at"]),
-        )
+            return _default_persona()
+        try:
+            name = str(payload["name"]).strip().lower()
+            prompt = str(payload["prompt"]).strip()
+            updated_at = str(payload["updated_at"])
+        except KeyError:
+            LOGGER.warning("Ignoring incomplete persisted persona state")
+            return _default_persona()
+
+        if not name or not prompt:
+            LOGGER.warning("Ignoring malformed persisted persona state")
+            return _default_persona()
+
+        return PersonaState(name=name, prompt=prompt, updated_at=updated_at)
 
     def set_persona(self, name: str, prompt: str | None = None) -> PersonaState:
         normalized = name.strip().lower()
@@ -206,7 +230,16 @@ class StateStore:
             ).fetchone()
         if row is None:
             return None
-        return json.loads(str(row["value_json"]))
+        try:
+            payload = json.loads(str(row["value_json"]))
+        except json.JSONDecodeError:
+            LOGGER.warning("Ignoring malformed persisted state JSON for %s", key)
+            return None
+
+        if not isinstance(payload, dict):
+            LOGGER.warning("Ignoring non-object persisted state JSON for %s", key)
+            return None
+        return payload
 
     def _set_json(self, key: str, value: dict[str, object]) -> None:
         updated_at = _now()
@@ -248,6 +281,18 @@ class StateStore:
 
 def _now() -> str:
     return datetime.now(UTC).isoformat()
+
+
+def _default_mood() -> MoodState:
+    return MoodState(label="curious", energy=0.5, updated_at=_now())
+
+
+def _default_persona() -> PersonaState:
+    return PersonaState(
+        name="nuru",
+        prompt=DEFAULT_PERSONA_PROMPTS["nuru"],
+        updated_at=_now(),
+    )
 
 
 def _word_tokens(text: str) -> list[str]:
