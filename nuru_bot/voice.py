@@ -277,7 +277,7 @@ class VoiceRuntime:
         voice_client = self.voice_client
         if voice_client is None or not _voice_client_is_connected(voice_client):
             return False
-        if voice_client.is_playing():
+        if _voice_client_is_playing(voice_client, default=True):
             return False
 
         now = time.monotonic()
@@ -351,7 +351,7 @@ async def play_tts_stream(
         pipe=True,
         executable=config.ffmpeg_executable,
     )
-    if voice_client.is_playing():
+    if _voice_client_is_playing(voice_client, default=False):
         voice_client.stop()
     voice_client.play(source)
 
@@ -410,6 +410,14 @@ def _voice_client_is_connected(voice_client: VoiceClient) -> bool:
     except Exception:
         LOGGER.exception("Failed to inspect voice client connection state")
         return False
+
+
+def _voice_client_is_playing(voice_client: VoiceClient, *, default: bool) -> bool:
+    try:
+        return bool(voice_client.is_playing())
+    except Exception:
+        LOGGER.exception("Failed to inspect voice client playback state")
+        return default
 
 
 def _voice_author_name(voice_client: VoiceClient, user_id: object) -> str:

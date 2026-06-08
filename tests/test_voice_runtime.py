@@ -128,6 +128,11 @@ class BrokenConnectionVoiceClient(FakeRecordingVoiceClient):
         raise RuntimeError("voice connection state unavailable")
 
 
+class BrokenPlaybackStateVoiceClient(FakeVoiceClient):
+    def is_playing(self):
+        raise RuntimeError("voice playback state unavailable")
+
+
 class FakeSink:
     def __init__(self, audio_data):
         self.audio_data = audio_data
@@ -554,6 +559,29 @@ def test_speak_streams_tts_chunks_into_ffmpeg_source(monkeypatch):
     assert len(voice_client.played_sources) == 1
 
 
+def test_speak_still_plays_when_playback_state_check_crashes(monkeypatch):
+    captured_audio = []
+
+    class FakeAudioSource:
+        def __init__(self, stream, *, pipe, executable):
+            captured_audio.append((stream.read(), pipe, executable))
+
+    monkeypatch.setattr("nuru_bot.voice.FFmpegPCMAudio", FakeAudioSource)
+    api = FakeApi("nuru")
+    voice_client = BrokenPlaybackStateVoiceClient()
+    runtime = VoiceRuntime(
+        config=make_config(tts_voice="vtuber", ffmpeg_executable="ffmpeg-test"),
+        api=api,
+        companion=FakeCompanion(),
+    )
+
+    asyncio.run(runtime.speak(voice_client, "hello stream"))
+
+    assert api.tts_requests == [("hello stream", "vtuber")]
+    assert captured_audio == [(b"audio", True, "ffmpeg-test")]
+    assert voice_client.played_sources
+
+
 def test_iterator_audio_stream_returns_buffered_audio_after_chunk_error():
     def chunks():
         yield b"abc"
@@ -627,6 +655,23 @@ def test_idle_commentary_returns_false_when_delivery_crashes():
     assert not asyncio.run(runtime.maybe_run_idle_commentary())
     assert companion.idle_requests == [("321", "42", "Solo")]
     assert runtime.last_idle_commentary_at == 0.0
+
+
+def test_idle_commentary_skips_when_playback_state_check_crashes():
+    user = type("Member", (), {"id": 321, "display_name": "Solo", "bot": False})()
+    companion = FakeCompanion()
+    runtime = CapturingVoiceRuntime(
+        config=make_config(idle_commentary_seconds=30),
+        api=FakeApi("nuru"),
+        companion=companion,
+    )
+    runtime.voice_client = BrokenPlaybackStateVoiceClient(members=[user])
+    runtime.last_voice_activity_at = 0.0
+    runtime.last_idle_commentary_at = 0.0
+
+    assert not asyncio.run(runtime.maybe_run_idle_commentary())
+    assert companion.idle_requests == []
+    assert runtime.spoken == []
 
 
 def test_idle_commentary_skips_when_multiple_humans_are_present():
