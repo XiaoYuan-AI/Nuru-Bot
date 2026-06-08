@@ -50,6 +50,17 @@ def test_generate_reads_result_field():
     assert session.requests[0][1] == "http://nuru.local/model"
 
 
+@pytest.mark.parametrize("result", [None, "", "   "])
+def test_generate_rejects_empty_result_field(result):
+    session = FakeSession()
+    session.next_response = FakeResponse({"result": result})
+    api = NuruApi("http://nuru.local", 3)
+    api.session = session
+
+    with pytest.raises(NuruApiError, match="empty result"):
+        api.generate("hi")
+
+
 def test_describe_image_encodes_image_bytes():
     session = FakeSession()
     session.next_response = FakeResponse({"result": "small image"})

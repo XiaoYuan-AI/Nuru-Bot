@@ -69,12 +69,16 @@ class NuruApi:
 
     def _request_result(self, method: str, path: str, **kwargs: object) -> str:
         payload = self._request_json(method, path, **kwargs)
+        url = f"{self.base_url}/{path.lstrip('/')}"
 
         if not isinstance(payload, dict) or "result" not in payload:
-            url = f"{self.base_url}/{path.lstrip('/')}"
             raise NuruApiError(f"Request to {url} did not include a result field")
 
-        return str(payload["result"])
+        result = payload["result"]
+        if result is None or not str(result).strip():
+            raise NuruApiError(f"Request to {url} returned an empty result")
+
+        return str(result)
 
     def _request_json(self, method: str, path: str, **kwargs: object) -> object:
         url = f"{self.base_url}/{path.lstrip('/')}"
