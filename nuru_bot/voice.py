@@ -232,7 +232,7 @@ class VoiceRuntime:
                     LOGGER.exception("Failed to deliver a voice-triggered TTS response")
                     continue
 
-        if voice_client.is_connected() and self.config.record_voice_audio:
+        if _voice_client_is_connected(voice_client) and self.config.record_voice_audio:
             self.start_recording(voice_client)
 
     async def speak(self, voice_client: VoiceClient, text: str) -> None:
@@ -263,7 +263,7 @@ class VoiceRuntime:
 
     async def _stop_recording_after_segment(self, voice_client: VoiceClient) -> None:
         await asyncio.sleep(self.config.recording_segment_seconds)
-        if not voice_client.is_connected():
+        if not _voice_client_is_connected(voice_client):
             return
         if not getattr(voice_client, "recording", False):
             return
@@ -275,7 +275,7 @@ class VoiceRuntime:
 
     async def maybe_run_idle_commentary(self) -> bool:
         voice_client = self.voice_client
-        if voice_client is None or not voice_client.is_connected():
+        if voice_client is None or not _voice_client_is_connected(voice_client):
             return False
         if voice_client.is_playing():
             return False
@@ -402,6 +402,14 @@ def _voice_channel_id(voice_client: VoiceClient) -> str:
     channel = getattr(voice_client, "channel", None)
     channel_id = getattr(channel, "id", "voice")
     return str(channel_id)
+
+
+def _voice_client_is_connected(voice_client: VoiceClient) -> bool:
+    try:
+        return bool(voice_client.is_connected())
+    except Exception:
+        LOGGER.exception("Failed to inspect voice client connection state")
+        return False
 
 
 def _voice_author_name(voice_client: VoiceClient, user_id: object) -> str:

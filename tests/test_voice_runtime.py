@@ -123,6 +123,11 @@ class FailingStartRecordingVoiceClient(FakeRecordingVoiceClient):
         raise RuntimeError("recording unavailable")
 
 
+class BrokenConnectionVoiceClient(FakeRecordingVoiceClient):
+    def is_connected(self):
+        raise RuntimeError("voice connection state unavailable")
+
+
 class FakeSink:
     def __init__(self, audio_data):
         self.audio_data = audio_data
@@ -438,6 +443,24 @@ def test_recording_callback_restarts_recording_when_tts_delivery_fails():
     assert voice_client.recording
 
 
+def test_recording_callback_skips_restart_when_connection_check_crashes():
+    runtime = CapturingVoiceRuntime(
+        config=make_config(
+            record_voice_audio=True,
+            recording_segment_seconds=10,
+            voice_vad_threshold=10,
+        ),
+        api=FakeApi("hey nuru"),
+        companion=FakeCompanion(),
+    )
+    voice_client = BrokenConnectionVoiceClient()
+
+    asyncio.run(runtime.recording_callback(BrokenSink(), voice_client))
+
+    assert not voice_client.started
+    assert not voice_client.recording
+
+
 def test_start_recording_stops_segment_after_configured_delay():
     runtime = CapturingVoiceRuntime(
         config=make_config(recording_segment_seconds=0.01),
@@ -487,6 +510,24 @@ def test_close_cancels_pending_recording_stop_task():
 
     assert voice_client.recording
     assert runtime._recording_stop_task.cancelled()
+
+
+def test_segment_stop_returns_when_connection_check_crashes():
+    runtime = CapturingVoiceRuntime(
+        config=make_config(recording_segment_seconds=0.01),
+        api=FakeApi("nuru"),
+        companion=FakeCompanion(),
+    )
+    voice_client = BrokenConnectionVoiceClient()
+    voice_client.recording = True
+
+    async def run_segment():
+        await runtime._stop_recording_after_segment(voice_client)
+
+    asyncio.run(run_segment())
+
+    assert voice_client.recording
+    assert voice_client.stopped_count == 0
 
 
 def test_speak_streams_tts_chunks_into_ffmpeg_source(monkeypatch):
