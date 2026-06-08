@@ -110,3 +110,31 @@ def test_memory_search_falls_back_to_recent_when_entries_have_no_embeddings(tmp_
     )
 
     assert [entry.content for entry in matches] == ["older context", "newer context"]
+
+
+def test_memory_recent_rejects_non_positive_limits(tmp_path):
+    store = MemoryStore(tmp_path / "memory.sqlite3")
+    store.add_entry(
+        user_id="user-1",
+        channel_id="channel-1",
+        role="user",
+        content="do not leak all history",
+        embedding=[],
+    )
+
+    assert store.recent(limit=0) == []
+    assert store.recent(limit=-1) == []
+
+
+def test_memory_search_rejects_non_positive_limits(tmp_path):
+    store = MemoryStore(tmp_path / "memory.sqlite3")
+    store.add_entry(
+        user_id="user-1",
+        channel_id="channel-1",
+        role="user",
+        content="do not leak matching history",
+        embedding=fallback_embedding("matching history"),
+    )
+
+    assert store.search(query_embedding=fallback_embedding("history"), limit=0) == []
+    assert store.search(query_embedding=fallback_embedding("history"), limit=-1) == []

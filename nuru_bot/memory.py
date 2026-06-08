@@ -67,6 +67,9 @@ class MemoryStore:
         channel_id: str | None = None,
         limit: int = 10,
     ) -> list[MemoryEntry]:
+        if limit <= 0:
+            return []
+
         where, params = self._scope_filter(user_id=user_id, channel_id=channel_id)
         params.append(limit)
 
@@ -89,6 +92,9 @@ class MemoryStore:
         channel_id: str | None = None,
         limit: int = 5,
     ) -> list[MemoryEntry]:
+        if limit <= 0:
+            return []
+
         query = [float(value) for value in query_embedding]
         if not query:
             return self.recent(user_id=user_id, channel_id=channel_id, limit=limit)
