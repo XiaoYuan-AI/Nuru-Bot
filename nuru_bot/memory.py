@@ -49,7 +49,7 @@ class MemoryStore:
         embedding: Iterable[float],
     ) -> int:
         created_at = datetime.now(UTC).isoformat()
-        embedding_json = json.dumps([float(value) for value in embedding])
+        embedding_json = json.dumps(_coerce_embedding(embedding, source="new"))
 
         with self._lock, self._connection:
             cursor = self._connection.execute(
@@ -97,7 +97,7 @@ class MemoryStore:
         if limit <= 0:
             return []
 
-        query = [float(value) for value in query_embedding]
+        query = _coerce_embedding(query_embedding, source="query")
         if not query:
             return self.recent(user_id=user_id, channel_id=channel_id, limit=limit)
 
@@ -242,14 +242,18 @@ def _parse_embedding_json(value: object) -> list[float]:
         LOGGER.warning("Ignoring non-list persisted memory embedding")
         return []
 
+    return _coerce_embedding(payload, source="persisted")
+
+
+def _coerce_embedding(values: Iterable[object], *, source: str) -> list[float]:
     try:
-        embedding = [float(item) for item in payload]
+        embedding = [float(item) for item in values]
     except (TypeError, ValueError):
-        LOGGER.warning("Ignoring non-numeric persisted memory embedding")
+        LOGGER.warning("Ignoring non-numeric %s memory embedding", source)
         return []
 
     if not all(math.isfinite(item) for item in embedding):
-        LOGGER.warning("Ignoring non-finite persisted memory embedding")
+        LOGGER.warning("Ignoring non-finite %s memory embedding", source)
         return []
     return embedding
 

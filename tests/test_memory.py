@@ -143,6 +143,41 @@ def test_memory_search_rejects_non_positive_limits(tmp_path):
     assert store.search(query_embedding=fallback_embedding("history"), limit=-1) == []
 
 
+def test_memory_add_entry_drops_non_finite_embeddings(tmp_path):
+    store = MemoryStore(tmp_path / "memory.sqlite3")
+    store.add_entry(
+        user_id="user-1",
+        channel_id="channel-1",
+        role="user",
+        content="non-finite vector",
+        embedding=[1.0, float("nan")],
+    )
+
+    assert store.recent()[0].embedding == []
+
+
+def test_memory_search_falls_back_to_recent_for_non_finite_query(tmp_path):
+    store = MemoryStore(tmp_path / "memory.sqlite3")
+    store.add_entry(
+        user_id="user-1",
+        channel_id="channel-1",
+        role="user",
+        content="older valid memory",
+        embedding=fallback_embedding("older"),
+    )
+    store.add_entry(
+        user_id="user-1",
+        channel_id="channel-1",
+        role="user",
+        content="newer valid memory",
+        embedding=fallback_embedding("newer"),
+    )
+
+    matches = store.search(query_embedding=[float("nan")], limit=1)
+
+    assert [entry.content for entry in matches] == ["newer valid memory"]
+
+
 def test_memory_recent_keeps_rows_with_malformed_embedding_json(tmp_path):
     database_path = tmp_path / "memory.sqlite3"
     MemoryStore(database_path).close()

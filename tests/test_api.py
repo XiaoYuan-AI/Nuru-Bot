@@ -103,6 +103,16 @@ def test_embed_rejects_non_numeric_embedding_values():
         api.embed("memory")
 
 
+def test_embed_rejects_non_finite_embedding_values():
+    session = FakeSession()
+    session.next_response = FakeResponse({"embedding": [1, float("nan")]})
+    api = NuruApi("http://nuru.local", 3)
+    api.session = session
+
+    with pytest.raises(NuruApiError, match="non-finite"):
+        api.embed("memory")
+
+
 def test_transcribe_audio_encodes_audio_bytes():
     session = FakeSession()
     session.next_response = FakeResponse({"result": "hey nuru"})

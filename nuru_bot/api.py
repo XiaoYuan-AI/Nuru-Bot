@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from base64 import b64encode
 from collections.abc import Iterator
 
@@ -34,6 +35,8 @@ class NuruApi:
 
         if embedding is None:
             raise NuruApiError("Embedding response did not include an embedding")
+        if not all(math.isfinite(value) for value in embedding):
+            raise NuruApiError("Embedding response included non-finite values")
         return embedding
 
     def transcribe_audio(self, audio_data: bytes) -> str:
