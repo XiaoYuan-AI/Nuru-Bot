@@ -56,7 +56,10 @@ def load_config(*, require_token: bool = True) -> BotConfig:
     return BotConfig(
         token=token or "",
         api_base_url=_env("NURU_API_BASE_URL", DEFAULT_API_BASE_URL),
-        request_timeout_seconds=_float_env("NURU_REQUEST_TIMEOUT_SECONDS", 30.0),
+        request_timeout_seconds=_positive_float_env(
+            "NURU_REQUEST_TIMEOUT_SECONDS",
+            30.0,
+        ),
         data_path=Path(_env("NURU_DATA_PATH", DEFAULT_DATA_PATH)),
         discord_proxy=_optional_env("DISCORD_PROXY", DEFAULT_DISCORD_PROXY),
         activity_name=_env("NURU_ACTIVITY_NAME", "Still WIP"),
@@ -75,15 +78,19 @@ def load_config(*, require_token: bool = True) -> BotConfig:
         enable_reaction_chat=_bool_env("NURU_ENABLE_REACTION_CHAT", False),
         enable_slash_commands=_bool_env("NURU_ENABLE_SLASH_COMMANDS", True),
         enable_idle_commentary=_bool_env("NURU_ENABLE_IDLE_COMMENTARY", True),
-        idle_commentary_seconds=_float_env("NURU_IDLE_COMMENTARY_SECONDS", 30.0),
-        voice_vad_threshold=_float_env("NURU_VAD_RMS_THRESHOLD", 500.0),
+        idle_commentary_seconds=_minimum_float_env(
+            "NURU_IDLE_COMMENTARY_SECONDS",
+            30.0,
+            minimum=30.0,
+        ),
+        voice_vad_threshold=_non_negative_float_env("NURU_VAD_RMS_THRESHOLD", 500.0),
         recording_segment_seconds=_positive_float_env(
             "NURU_RECORDING_SEGMENT_SECONDS",
             5.0,
         ),
         wake_words=_tuple_env("NURU_WAKE_WORDS", ("nuru", "hey nuru")),
         default_response_mode=_response_mode_env("NURU_DEFAULT_RESPONSE_MODE", "text"),
-        memory_context_limit=_int_env("NURU_MEMORY_CONTEXT_LIMIT", 6),
+        memory_context_limit=_non_negative_int_env("NURU_MEMORY_CONTEXT_LIMIT", 6),
         tts_voice=_optional_env("NURU_TTS_VOICE"),
         ffmpeg_executable=_env("NURU_FFMPEG_EXECUTABLE", "ffmpeg"),
     )
@@ -139,6 +146,20 @@ def _positive_float_env(name: str, default: float) -> float:
     return value
 
 
+def _non_negative_float_env(name: str, default: float) -> float:
+    value = _float_env(name, default)
+    if value < 0:
+        raise ValueError(f"{name} must be greater than or equal to 0")
+    return value
+
+
+def _minimum_float_env(name: str, default: float, *, minimum: float) -> float:
+    value = _float_env(name, default)
+    if value < minimum:
+        raise ValueError(f"{name} must be greater than or equal to {minimum:g}")
+    return value
+
+
 def _int_env(name: str, default: int) -> int:
     value = getenv(name)
     if value is None or not value.strip():
@@ -159,6 +180,13 @@ def _optional_int_env(name: str, default: int | None = None) -> int | None:
         return int(value)
     except ValueError as exc:
         raise ValueError(f"{name} must be an integer") from exc
+
+
+def _non_negative_int_env(name: str, default: int) -> int:
+    value = _int_env(name, default)
+    if value < 0:
+        raise ValueError(f"{name} must be greater than or equal to 0")
+    return value
 
 
 def _tuple_env(name: str, default: tuple[str, ...]) -> tuple[str, ...]:

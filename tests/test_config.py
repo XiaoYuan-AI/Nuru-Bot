@@ -110,3 +110,21 @@ def test_load_config_rejects_non_positive_recording_segment(monkeypatch):
 
     with pytest.raises(ValueError):
         load_config()
+
+
+@pytest.mark.parametrize(
+    ("name", "value"),
+    [
+        ("NURU_REQUEST_TIMEOUT_SECONDS", "0"),
+        ("NURU_REQUEST_TIMEOUT_SECONDS", "-1"),
+        ("NURU_IDLE_COMMENTARY_SECONDS", "29.9"),
+        ("NURU_VAD_RMS_THRESHOLD", "-0.1"),
+        ("NURU_MEMORY_CONTEXT_LIMIT", "-1"),
+    ],
+)
+def test_load_config_rejects_invalid_numeric_limits(monkeypatch, name, value):
+    monkeypatch.setenv("DISCORD_TOKEN", "discord-token")
+    monkeypatch.setenv(name, value)
+
+    with pytest.raises(ValueError):
+        load_config()
