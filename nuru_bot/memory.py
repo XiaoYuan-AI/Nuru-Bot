@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import math
 import re
 import sqlite3
@@ -13,6 +14,7 @@ from typing import Iterable
 
 
 TOKEN_PATTERN = re.compile(r"[a-z0-9_']+")
+LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -196,7 +198,7 @@ class MemoryStore:
             channel_id=str(row["channel_id"]),
             role=str(row["role"]),
             content=str(row["content"]),
-            embedding=json.loads(row["embedding_json"]),
+            embedding=_parse_embedding_json(row["embedding_json"]),
             created_at=str(row["created_at"]),
         )
 
@@ -227,6 +229,29 @@ def _cosine_similarity(left: list[float], right: list[float]) -> float:
     if left_norm == 0 or right_norm == 0:
         return 0.0
     return numerator / (left_norm * right_norm)
+
+
+def _parse_embedding_json(value: object) -> list[float]:
+    try:
+        payload = json.loads(str(value))
+    except json.JSONDecodeError:
+        LOGGER.warning("Ignoring malformed persisted memory embedding")
+        return []
+
+    if not isinstance(payload, list):
+        LOGGER.warning("Ignoring non-list persisted memory embedding")
+        return []
+
+    try:
+        embedding = [float(item) for item in payload]
+    except (TypeError, ValueError):
+        LOGGER.warning("Ignoring non-numeric persisted memory embedding")
+        return []
+
+    if not all(math.isfinite(item) for item in embedding):
+        LOGGER.warning("Ignoring non-finite persisted memory embedding")
+        return []
+    return embedding
 
 
 def _tokenize(text: str) -> list[str]:

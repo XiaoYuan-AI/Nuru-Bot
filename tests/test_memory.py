@@ -1,3 +1,6 @@
+import json
+import sqlite3
+
 from nuru_bot.memory import MemoryStore, fallback_embedding
 
 
@@ -138,3 +141,59 @@ def test_memory_search_rejects_non_positive_limits(tmp_path):
 
     assert store.search(query_embedding=fallback_embedding("history"), limit=0) == []
     assert store.search(query_embedding=fallback_embedding("history"), limit=-1) == []
+
+
+def test_memory_recent_keeps_rows_with_malformed_embedding_json(tmp_path):
+    database_path = tmp_path / "memory.sqlite3"
+    MemoryStore(database_path).close()
+    _write_memory_row(
+        database_path,
+        content="keep corrupted memory content",
+        embedding_json="{not valid json",
+    )
+
+    entries = MemoryStore(database_path).recent(limit=1)
+
+    assert entries[0].content == "keep corrupted memory content"
+    assert entries[0].embedding == []
+
+
+def test_memory_search_skips_malformed_embeddings_without_crashing(tmp_path):
+    database_path = tmp_path / "memory.sqlite3"
+    MemoryStore(database_path).close()
+    _write_memory_row(
+        database_path,
+        content="corrupted embedding",
+        embedding_json=json.dumps([1.0, None]),
+    )
+    _write_memory_row(
+        database_path,
+        content="valid rhythm memory",
+        embedding_json=json.dumps(fallback_embedding("rhythm")),
+    )
+
+    matches = MemoryStore(database_path).search(
+        query_embedding=fallback_embedding("rhythm"),
+        limit=1,
+    )
+
+    assert matches[0].content == "valid rhythm memory"
+
+
+def _write_memory_row(database_path, *, content, embedding_json):
+    with sqlite3.connect(database_path) as connection:
+        connection.execute(
+            """
+            INSERT INTO memory_entries
+                (user_id, channel_id, role, content, embedding_json, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "user-1",
+                "channel-1",
+                "user",
+                content,
+                embedding_json,
+                "then",
+            ),
+        )
