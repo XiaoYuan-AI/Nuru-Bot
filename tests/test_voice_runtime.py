@@ -4,7 +4,7 @@ import struct
 from nuru_bot.api import NuruApiError
 from nuru_bot.companion import InteractionResponse
 from nuru_bot.state import MoodState, PersonaState
-from nuru_bot.voice import VoiceRuntime, connect_voice_channel
+from nuru_bot.voice import IteratorAudioStream, VoiceRuntime, connect_voice_channel
 
 from .helpers import make_config
 
@@ -511,6 +511,29 @@ def test_speak_streams_tts_chunks_into_ffmpeg_source(monkeypatch):
     assert captured_audio == [(b"audio", True, "ffmpeg-test")]
     assert voice_client.stopped
     assert len(voice_client.played_sources) == 1
+
+
+def test_iterator_audio_stream_returns_buffered_audio_after_chunk_error():
+    def chunks():
+        yield b"abc"
+        raise RuntimeError("tts stream failed")
+
+    stream = IteratorAudioStream(chunks())
+
+    assert stream.read(10) == b"abc"
+    assert stream.read(10) == b""
+
+
+def test_iterator_audio_stream_unbounded_read_stops_after_chunk_error():
+    def chunks():
+        yield b"one"
+        yield b"two"
+        raise RuntimeError("tts stream failed")
+
+    stream = IteratorAudioStream(chunks())
+
+    assert stream.read() == b"onetwo"
+    assert stream.read() == b""
 
 
 def test_idle_commentary_runs_after_silence_when_one_user_is_alone():

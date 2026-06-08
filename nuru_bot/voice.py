@@ -84,20 +84,33 @@ class IteratorAudioStream(io.RawIOBase):
         if size is None or size < 0:
             parts = [bytes(self._buffer)]
             self._buffer.clear()
-            parts.extend(self._chunks)
-            self._closed = True
+            while True:
+                chunk = self._next_chunk()
+                if chunk is None:
+                    break
+                parts.append(chunk)
             return b"".join(parts)
 
         while len(self._buffer) < size:
-            try:
-                self._buffer.extend(next(self._chunks))
-            except StopIteration:
-                self._closed = True
+            chunk = self._next_chunk()
+            if chunk is None:
                 break
+            self._buffer.extend(chunk)
 
         data = bytes(self._buffer[:size])
         del self._buffer[:size]
         return data
+
+    def _next_chunk(self) -> bytes | None:
+        try:
+            return next(self._chunks)
+        except StopIteration:
+            self._closed = True
+            return None
+        except Exception:
+            LOGGER.exception("Failed to read TTS audio stream chunk")
+            self._closed = True
+            return None
 
 
 class VoiceRuntime:
