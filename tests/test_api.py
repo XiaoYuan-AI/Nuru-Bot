@@ -61,6 +61,16 @@ def test_generate_rejects_empty_result_field(result):
         api.generate("hi")
 
 
+def test_generate_rejects_invalid_response_object():
+    session = FakeSession()
+    session.next_response = None
+    api = NuruApi("http://nuru.local", 3)
+    api.session = session
+
+    with pytest.raises(NuruApiError, match="invalid response"):
+        api.generate("hi")
+
+
 def test_describe_image_encodes_image_bytes():
     session = FakeSession()
     session.next_response = FakeResponse({"result": "small image"})
@@ -147,6 +157,16 @@ def test_stream_tts_sends_voice_when_configured():
         "input": "say this",
         "voice": "vtuber",
     }
+
+
+def test_stream_tts_rejects_invalid_response_object():
+    session = FakeSession()
+    session.next_response = None
+    api = NuruApi("http://nuru.local", 3)
+    api.session = session
+
+    with pytest.raises(NuruApiError, match="invalid response"):
+        list(api.stream_tts("say this"))
 
 
 def test_close_closes_session():

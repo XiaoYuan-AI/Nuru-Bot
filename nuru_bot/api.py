@@ -66,6 +66,8 @@ class NuruApi:
                         yield chunk
         except RequestException as exc:
             raise NuruApiError(f"Request to {url} failed") from exc
+        except (AttributeError, TypeError) as exc:
+            raise NuruApiError(f"Request to {url} returned an invalid response") from exc
 
     def close(self) -> None:
         self.session.close()
@@ -97,6 +99,8 @@ class NuruApi:
             payload = response.json()
         except RequestException as exc:
             raise NuruApiError(f"Request to {url} failed") from exc
+        except (AttributeError, TypeError) as exc:
+            raise NuruApiError(f"Request to {url} returned an invalid response") from exc
         except ValueError as exc:
             raise NuruApiError(f"Request to {url} returned invalid JSON") from exc
 
