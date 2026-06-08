@@ -136,6 +136,39 @@ def test_transcribe_audio_encodes_audio_bytes():
     assert kwargs["json"] == {"input": "YXVkaW8tYnl0ZXM="}
 
 
+def test_moderate_reads_filter_result():
+    session = FakeSession()
+    session.next_response = FakeResponse({"result": ["Safe", []]})
+    api = NuruApi("http://nuru.local", 3)
+    api.session = session
+
+    assert api.moderate("hello") == ("Safe", [])
+    assert session.requests[0][1] == "http://nuru.local/v2/model"
+    assert session.requests[0][2]["json"] == {"text": "hello"}
+
+
+def test_execute_tool_call_reads_tool_result():
+    session = FakeSession()
+    session.next_response = FakeResponse(
+        {
+            "tool_result": {
+                "action": "calculator",
+                "success": True,
+                "result": {"value": 4},
+            }
+        }
+    )
+    api = NuruApi("http://nuru.local", 3)
+    api.session = session
+
+    result = api.execute_tool_call(
+        {"action": "calculator", "parameters": {"expression": "2 + 2"}}
+    )
+
+    assert result["result"]["value"] == 4
+    assert session.requests[0][1] == "http://nuru.local/v1/tools/execute"
+
+
 def test_stream_tts_yields_non_empty_chunks():
     session = FakeSession()
     session.next_response = FakeResponse(chunks=[b"one", b"", b"two"])

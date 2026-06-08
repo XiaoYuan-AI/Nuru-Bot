@@ -288,6 +288,11 @@ def _config(database_path: Path, token: str) -> BotConfig:
         wake_words=("nuru",),
         default_response_mode="text",
         memory_context_limit=6,
+        working_memory_limit=20,
+        reflection_interval_messages=20,
+        reflection_memory_limit=30,
+        enable_moderation=False,
+        observability_log_path=None,
         tts_voice=None,
         ffmpeg_executable="ffmpeg",
     )

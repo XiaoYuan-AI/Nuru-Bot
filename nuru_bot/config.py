@@ -42,6 +42,11 @@ class BotConfig:
     wake_words: tuple[str, ...]
     default_response_mode: ResponseModeName
     memory_context_limit: int
+    working_memory_limit: int
+    reflection_interval_messages: int
+    reflection_memory_limit: int
+    enable_moderation: bool
+    observability_log_path: Path | None
     tts_voice: str | None
     ffmpeg_executable: str
 
@@ -91,6 +96,17 @@ def load_config(*, require_token: bool = True) -> BotConfig:
         wake_words=_tuple_env("NURU_WAKE_WORDS", ("nuru", "hey nuru")),
         default_response_mode=_response_mode_env("NURU_DEFAULT_RESPONSE_MODE", "text"),
         memory_context_limit=_non_negative_int_env("NURU_MEMORY_CONTEXT_LIMIT", 6),
+        working_memory_limit=_non_negative_int_env("NURU_WORKING_MEMORY_LIMIT", 20),
+        reflection_interval_messages=_non_negative_int_env(
+            "NURU_REFLECTION_INTERVAL_MESSAGES",
+            20,
+        ),
+        reflection_memory_limit=_non_negative_int_env("NURU_REFLECTION_MEMORY_LIMIT", 30),
+        enable_moderation=_bool_env("NURU_ENABLE_MODERATION", True),
+        observability_log_path=_optional_path_env(
+            "NURU_OBSERVABILITY_LOG_PATH",
+            Path("data/observability.jsonl"),
+        ),
         tts_voice=_optional_env("NURU_TTS_VOICE"),
         ffmpeg_executable=_env("NURU_FFMPEG_EXECUTABLE", "ffmpeg"),
     )
@@ -112,6 +128,13 @@ def _optional_env(name: str, default: str | None = None) -> str | None:
 
     value = value.strip()
     return value or None
+
+
+def _optional_path_env(name: str, default: Path | None = None) -> Path | None:
+    value = _optional_env(name)
+    if value is None:
+        return default
+    return Path(value)
 
 
 def _bool_env(name: str, default: bool) -> bool:

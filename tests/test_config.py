@@ -29,6 +29,11 @@ CONFIG_ENV_NAMES = [
     "NURU_WAKE_WORDS",
     "NURU_DEFAULT_RESPONSE_MODE",
     "NURU_MEMORY_CONTEXT_LIMIT",
+    "NURU_WORKING_MEMORY_LIMIT",
+    "NURU_REFLECTION_INTERVAL_MESSAGES",
+    "NURU_REFLECTION_MEMORY_LIMIT",
+    "NURU_ENABLE_MODERATION",
+    "NURU_OBSERVABILITY_LOG_PATH",
     "NURU_TTS_VOICE",
     "NURU_FFMPEG_EXECUTABLE",
 ]
@@ -53,6 +58,11 @@ def test_load_config_uses_environment_values(monkeypatch):
     monkeypatch.setenv("NURU_RECORDING_SEGMENT_SECONDS", "2.5")
     monkeypatch.setenv("NURU_DEFAULT_RESPONSE_MODE", "both")
     monkeypatch.setenv("NURU_MEMORY_CONTEXT_LIMIT", "9")
+    monkeypatch.setenv("NURU_WORKING_MEMORY_LIMIT", "7")
+    monkeypatch.setenv("NURU_REFLECTION_INTERVAL_MESSAGES", "3")
+    monkeypatch.setenv("NURU_REFLECTION_MEMORY_LIMIT", "11")
+    monkeypatch.setenv("NURU_ENABLE_MODERATION", "false")
+    monkeypatch.setenv("NURU_OBSERVABILITY_LOG_PATH", "runtime/events.jsonl")
     monkeypatch.setenv("NURU_TTS_VOICE", "vtuber")
 
     config = load_config()
@@ -68,6 +78,11 @@ def test_load_config_uses_environment_values(monkeypatch):
     assert config.recording_segment_seconds == 2.5
     assert config.default_response_mode == "both"
     assert config.memory_context_limit == 9
+    assert config.working_memory_limit == 7
+    assert config.reflection_interval_messages == 3
+    assert config.reflection_memory_limit == 11
+    assert not config.enable_moderation
+    assert config.observability_log_path == Path("runtime/events.jsonl")
     assert config.tts_voice == "vtuber"
 
 
@@ -120,6 +135,9 @@ def test_load_config_rejects_non_positive_recording_segment(monkeypatch):
         ("NURU_IDLE_COMMENTARY_SECONDS", "29.9"),
         ("NURU_VAD_RMS_THRESHOLD", "-0.1"),
         ("NURU_MEMORY_CONTEXT_LIMIT", "-1"),
+        ("NURU_WORKING_MEMORY_LIMIT", "-1"),
+        ("NURU_REFLECTION_INTERVAL_MESSAGES", "-1"),
+        ("NURU_REFLECTION_MEMORY_LIMIT", "-1"),
     ],
 )
 def test_load_config_rejects_invalid_numeric_limits(monkeypatch, name, value):

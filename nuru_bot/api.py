@@ -47,6 +47,32 @@ class NuruApi:
             json={"input": encoded_audio},
         )
 
+    def moderate(self, text: str) -> tuple[str, list[str]]:
+        payload = self._request_json("POST", "/v2/model", json={"text": text})
+        if isinstance(payload, dict):
+            result = payload.get("result")
+            if isinstance(result, list | tuple) and result:
+                label = str(result[0])
+                categories = result[1] if len(result) > 1 else []
+                if isinstance(categories, list):
+                    return label, [str(category) for category in categories]
+                return label, [str(categories)]
+            label = payload.get("label")
+            if isinstance(label, str):
+                categories = payload.get("categories", [])
+                if isinstance(categories, list):
+                    return label, [str(category) for category in categories]
+        raise NuruApiError("Moderation response did not include a label")
+
+    def execute_tool_call(self, tool_call: dict[str, object]) -> dict[str, object]:
+        payload = self._request_json("POST", "/v1/tools/execute", json=tool_call)
+        if not isinstance(payload, dict):
+            raise NuruApiError("Tool response was not an object")
+        result = payload.get("tool_result")
+        if not isinstance(result, dict):
+            raise NuruApiError("Tool response did not include a tool_result")
+        return result
+
     def stream_tts(self, text: str, *, voice: str | None = None) -> Iterator[bytes]:
         payload = {"input": text}
         if voice:

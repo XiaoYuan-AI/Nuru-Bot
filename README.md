@@ -57,6 +57,11 @@ NURU_ENABLE_REACTION_CHAT=false
 NURU_ENABLE_SLASH_COMMANDS=true
 NURU_DEFAULT_RESPONSE_MODE=text
 NURU_MEMORY_CONTEXT_LIMIT=6
+NURU_WORKING_MEMORY_LIMIT=20
+NURU_REFLECTION_INTERVAL_MESSAGES=20
+NURU_REFLECTION_MEMORY_LIMIT=30
+NURU_ENABLE_MODERATION=true
+NURU_OBSERVABILITY_LOG_PATH=data/observability.jsonl
 NURU_TTS_VOICE=
 NURU_FFMPEG_EXECUTABLE=ffmpeg
 ```
@@ -84,6 +89,18 @@ uv run python main.py
 uv run pytest
 uv run python -m compileall bot.py main.py nuru_bot tests
 ```
+
+## VTuber Runtime Behavior
+
+The companion pipeline now keeps a rolling working-memory buffer, runs generated
+text through the local Nuru moderation endpoint when enabled, executes JSON tool
+calls through `/v1/tools/execute`, and periodically stores private reflection
+and internal-monologue entries in SQLite memory. Supported model tool actions
+come from the API backend: `calendar`, `set_reminder`, `list_reminders`, and
+`calculator`.
+
+Structured response-cycle logs are written to `NURU_OBSERVABILITY_LOG_PATH` when
+configured.
 
 ## Slash Commands
 
