@@ -1,5 +1,6 @@
 import asyncio
 
+from nuru_bot.api import NuruApiError
 from nuru_bot.companion import CompanionService, InteractionRequest
 from nuru_bot.memory import MemoryStore
 from nuru_bot.state import StateStore
@@ -17,6 +18,11 @@ class FakeApi:
     def generate(self, prompt):
         self.prompts.append(prompt)
         return "remembered response"
+
+
+class FailingEmbeddingApi(FakeApi):
+    def embed(self, text):
+        raise NuruApiError("malformed embedding")
 
 
 def test_companion_stores_user_and_assistant_entries_in_same_scope():
@@ -75,6 +81,34 @@ def test_companion_prompt_does_not_treat_current_message_as_memory():
     prompt = api.prompts[0]
     assert "- No relevant memories yet." in prompt
     assert prompt.count("brand new active turn") == 1
+
+
+def test_companion_falls_back_when_embedding_api_returns_bad_payload():
+    memory = MemoryStore(":memory:")
+    state = StateStore(":memory:")
+    service = CompanionService(
+        api=FailingEmbeddingApi(),
+        memory=memory,
+        state=state,
+        config=make_config(),
+    )
+
+    response = asyncio.run(
+        service.respond(
+            InteractionRequest(
+                user_id="user-1",
+                channel_id="channel-1",
+                author_name="Tester",
+                content="remember this despite embedding failure",
+                source="text",
+            )
+        )
+    )
+
+    entries = memory.recent(user_id="user-1", channel_id="channel-1")
+    assert response.text == "remembered response"
+    assert [entry.role for entry in entries] == ["user", "assistant"]
+    assert all(entry.embedding for entry in entries)
 
 
 def test_companion_prompt_uses_user_and_channel_memory_context():

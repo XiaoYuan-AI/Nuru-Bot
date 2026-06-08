@@ -25,7 +25,13 @@ class NuruApi:
 
     def embed(self, text: str) -> list[float]:
         payload = self._request_json("POST", "/embeddings", json={"input": text})
-        embedding = _extract_embedding(payload)
+        try:
+            embedding = _extract_embedding(payload)
+        except (TypeError, ValueError) as exc:
+            raise NuruApiError(
+                "Embedding response included non-numeric values"
+            ) from exc
+
         if embedding is None:
             raise NuruApiError("Embedding response did not include an embedding")
         return embedding

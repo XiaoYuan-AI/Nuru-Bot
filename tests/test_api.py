@@ -82,6 +82,16 @@ def test_embed_rejects_missing_embedding():
         api.embed("memory")
 
 
+def test_embed_rejects_non_numeric_embedding_values():
+    session = FakeSession()
+    session.next_response = FakeResponse({"embedding": [1, None]})
+    api = NuruApi("http://nuru.local", 3)
+    api.session = session
+
+    with pytest.raises(NuruApiError, match="non-numeric"):
+        api.embed("memory")
+
+
 def test_transcribe_audio_encodes_audio_bytes():
     session = FakeSession()
     session.next_response = FakeResponse({"result": "hey nuru"})
